@@ -1,21 +1,23 @@
 
+include:
+  - docker-compose-airflow.yaml
 
 secrets:
   minio_root_user:
     environment: MINIO_ROOT_USER
   minio_root_password:
     environment: MINIO_ROOT_PASSWORD
-  postgres_user:
-    environment: POSTGRES_USER
-  postgres_password:
-    environment: POSTGRES_PASSWORD
+  postgres_mlflow_user:
+    environment: POSTGRES_MLFLOW_USER
+  postgres_mlflow_password:
+    environment: POSTGRES_MLFLOW_PASSWORD
 
+name: estimator
 
 services:
   
   # Minio Object Storage
   minio:
-    container_name: ${MINIO_HOST:-minio}
     image: minio/minio:${MINIO_IMAGE:-RELEASE.2025-09-07T16-13-09Z-cpuv1}
     ports:
       - "${MINIO_HOST_API_PORT:-9000}:9000" # API port
@@ -39,7 +41,6 @@ services:
 
   # Minio Client to initialize buckets, exits after creation
   minio-init:
-    container_name: minio-init
     image: minio/mc:${MINIO_MC_IMAGE:-RELEASE.2025-08-13T08-35-41Z}
     depends_on:
       minio:
@@ -61,15 +62,14 @@ services:
         done;
       "
 
-  postgres:
+  mlflow-postgres:
     image: postgres:15
-    container_name: mlflow-postgres
     secrets:
-      - postgres_user
-      - postgres_password
+      - postgres_mlflow_user
+      - postgres_mlflow_password
     environment:
-      POSTGRES_USER_FILE: /run/secrets/postgres_user
-      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_USER_FILE: /run/secrets/postgres_mlflow_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_mlflow_password
       POSTGRES_DB: ${POSTGRES_DB:-mlflow}
     volumes:
       - ${POSTGRES_DATA_PATH:-./postgres/data}:/var/lib/postgresql/data
@@ -84,9 +84,8 @@ services:
     
   mlflow:
     image: ghcr.io/mlflow/mlflow:${MLFLOW_VERSION:-v3.8.1}
-    container_name: mlflow-server
     depends_on:
-      postgres:
+      mlflow-postgres:
         condition: service_healthy
       minio:
         condition: service_healthy
@@ -95,8 +94,8 @@ services:
     secrets:
       - minio_root_user
       - minio_root_password
-      - postgres_user
-      - postgres_password
+      - postgres_mlflow_user
+      - postgres_mlflow_password
 
     environment:
       
@@ -123,7 +122,7 @@ services:
       - |
         pip install --no-cache-dir psycopg2-binary boto3
         mlflow server \
-          --backend-store-uri "postgresql://$(cat /run/secrets/postgres_user):$(cat /run/secrets/postgres_password)@postgres:5432/$${POSTGRES_DB}" \
+          --backend-store-uri "postgresql://$(cat /run/secrets/postgres_mlflow_user):$(cat /run/secrets/postgres_mlflow_password)@mlflow-postgres:5432/$${POSTGRES_DB}" \
           --artifacts-destination "$${MLFLOW_ARTIFACTS_DESTINATION}" \
           --serve-artifacts \
           --host "$${MLFLOW_HOST}" \
