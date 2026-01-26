@@ -91,13 +91,27 @@ x-airflow-common:
 # Project name
 name: "airflow"
 
+secrets:
+  airflow_user:
+    environment: _AIRFLOW_WWW_USER_USERNAME
+  airflow_password:
+    environment: _AIRFLOW_WWW_USER_PASSWORD
+  postgres_airflow_user:
+    environment: POSTGRES_AIRFLOW_USER
+  postgres_airflow_password:
+    environment: POSTGRES_AIRFLOW_PASSWORD
+
+
 services:
   airflow-postgres:
     image: postgres:16
+    secrets:
+      - postgres_airflow_user
+      - postgres_airflow_password
     environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
+      POSTGRES_USER_FILE: /run/secrets/postgres_airflow_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_airflow_password
+      POSTGRES_DB: ${POSTGRES_AIRFLOW_DB:-airflow}
     volumes:
       - postgres-db-volume:/var/lib/postgresql/data
     healthcheck:
@@ -215,6 +229,10 @@ services:
     command:
       - -c
       - |
+        # export variables from secrets
+        export _AIRFLOW_WWW_USER_USERNAME=$$(cat /run/secrets/airflow_user)
+        export _AIRFLOW_WWW_USER_PASSWORD=$$(cat /run/secrets/airflow_password)
+
         if [[ -z "${AIRFLOW_UID}" ]]; then
           echo
           echo -e "\033[1;33mWARNING!!!: AIRFLOW_UID not set!\e[0m"
@@ -291,12 +309,13 @@ services:
         ls -la /opt/airflow/{logs,dags,plugins,config}
 
     # yamllint enable rule:line-length
+    secrets:
+      - airflow_user
+      - airflow_password
     environment:
       <<: *airflow-common-env
       _AIRFLOW_DB_MIGRATE: 'true'
       _AIRFLOW_WWW_USER_CREATE: 'true'
-      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
-      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
       _PIP_ADDITIONAL_REQUIREMENTS: ''
     user: "0:0"
 
