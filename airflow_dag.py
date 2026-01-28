@@ -1,26 +1,25 @@
-from pathlib import Path
+
+
 from airflow import DAG
-from airflow.providers.http.hooks.http import HttpHook
+from airflow.providers.standard.operators.python import PythonOperator
+#from airflow.providers.http.hooks.http import HttpHook
 #from airflow.providers.postgres.hooks.postgres import PostgresHook
 #from airflow.decorators import task
 #from airflow.utils.dates import days_ago
+from pathlib import Path
 from cadwyn import endpoint
+#from dotenv import load_dotenv
 import requests
-import json
+#import json
 import os
 import logging
 import pandas as pd
-
-
-
+import numpy as np
 
 
 from minio import Minio
-#from dotenv import load_dotenv
 
-global global_s3_client
-
-
+global_s3_client = None
 
 default_args = {
     'owner': 'airflow',
@@ -34,14 +33,14 @@ def get_s3_client():
     Return a Minio client instance
     """
 
-    if global_minio_client is not None:
-        return global_minio_client
+    if global_s3_client is not None:
+        return global_s3_client
     
     try:
 
         access_key=os.getenv("MINIO_ACCESS_KEY")
         secret_key=os.getenv("MINIO_SECRET_KEY")
-        minio_port=os.getenv("MINIO_PORT",9000)
+        minio_port=os.getenv("MINIO_HOST_API_PORT",9000)
         minio_region=os.getenv("MINIO_REGION","us-est-1")
 
         # Create client with access key and secret key with specific region.
@@ -58,7 +57,7 @@ def get_s3_client():
     return global_s3_client
 
 
-def fecth_data(pattern="*.csv", concat=True, add_filename_col=True, sort=True, **read_csv_kwargs) -> pd.DataFrame:
+def fecth_data(ti, pattern="*.csv", concat=True, add_filename_col=True, sort=True, **read_csv_kwargs) -> pd.DataFrame:
     """
     Download files from an S3 bucket and Load CSV files from `directory`.
 
@@ -76,9 +75,9 @@ def fecth_data(pattern="*.csv", concat=True, add_filename_col=True, sort=True, *
 
     try:
 
-        s3_client = get_s3_client()
-
-        source_data_bucket=os.getenv("SOURCE_DATA_BUCKET","source-data")
+        s3_client = ti.xcom_pull(task_ids='get_s3_client')
+        
+        source_data_bucket=os.getenv("MINIO_DATA_BUCKET","source-data")
         
         objects = s3_client.list_objects(bucket_name=source_data_bucket, object_name=pattern)
 
@@ -118,6 +117,7 @@ def fecth_data(pattern="*.csv", concat=True, add_filename_col=True, sort=True, *
         return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
     else:
         return dfs
+
 
 
 def transform_data(ti):
@@ -226,4 +226,85 @@ def get_historical_weather(ti):
     
     
     
+def merge_historical_weather(ti):
+    """
+    Merge historical weather data with transformed source data
+    """
+
+    _, _, df = ti.xcom_pull(task_ids='transform_data')
+    hourly_weather_df = ti.xcom_pull(task_ids='get_historical_weather')
+
+    # merge energy data with weather historical data on timestamp
+    df['timestamp'] = pd.to_datetime(df['timestamp'], utc=False)
+    hourly_weather_df['timestamp'] = pd.to_datetime(hourly_weather_df['timestamp'], utc=False)
+    df_merge = pd.merge(df, hourly_weather_df, how='left', on='timestamp')
+
+    # fill missing data at half-hours with that from the beginning of the corresponding hours
+    df_missing = df_merge[ ( np.isnan(df_merge.weather_code) | np.isnan(df_merge.cloud_cover) | np.isnan(df_merge.temperature) ) ]
+
+    if df_missing.size>0:
+        logging.info('Filling missing weather data at half-hours')
+        df_merge = df_merge.reset_index()  # make sure indexes pair with number of rows
+        
+        for idx, row in df_merge.iterrows():    
+            if row['timestamp'].minute==30:
+                source_idx = ( idx-1 if idx > 0 else idx+1 )
+                if (np.isnan(row['weather_code'])):
+                    df_merge.at[ idx, 'weather_code'] = df_merge.loc[source_idx]['weather_code']
+                if (np.isnan(row['cloud_cover'])):
+                    df_merge.at[ idx, 'cloud_cover'] = df_merge.loc[source_idx]['cloud_cover']
+                if (np.isnan(row['temperature'])):
+                    df_merge.at[ idx, 'temperature'] = df_merge.loc[source_idx]['temperature']
+
+    # Check whether some weather data is missing
+    missing_count = df_merge[ ( np.isnan(df_merge['weather_code']) | np.isnan(df_merge['cloud_cover']) | np.isnan(df_merge['temperature']) )].size
+    if missing_count>0:
+        raise RuntimeError(f"After filling, still {missing_count} missing weather data points remain")
+
+    logging.info(f"Merged data frame has {len(df_merge)} rows")
+
+    return df_merge
+
+
+with DAG(
+    dag_id='solar_energy_surplus_estimator_model_pipeline',
+    default_args=default_args,
+    start_date=None,
+    schedule_interval=None,
+    catchup=False,
+    tags=['solar', 'energy', 'surplus', 'estimation'],
+) as dag:
     
+    get_s3_client_task = PythonOperator(
+        task_id='get_s3_client',
+        python_callable=get_s3_client,
+    )
+
+    fetch_data_task = PythonOperator(
+        task_id='fetch_data',
+        python_callable=fecth_data,
+        op_kwargs={
+            "pattern": "*.csv",
+            "concat": True,
+            "add_filename_col": True,
+            "sort": True,
+            "read_csv_kwargs": {"parse_dates": ["timestamp"]},
+        },
+    )
+
+    transform_data_task = PythonOperator(
+        task_id='transform_data',
+        python_callable=transform_data,
+    )
+
+    get_historical_weather_task = PythonOperator(
+        task_id='get_historical_weather',
+        python_callable=get_historical_weather,
+    )
+
+    merge_historical_weather_task = PythonOperator(
+        task_id='merge_historical_weather',
+        python_callable=merge_historical_weather,
+    )
+
+    get_s3_client_task >> fetch_data_task >> transform_data_task >> get_historical_weather_task >> merge_historical_weather_task
