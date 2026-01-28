@@ -1,0 +1,140 @@
+
+include:
+  - docker-compose-airflow.yaml
+
+secrets:
+  minio_root_user:
+    environment: MINIO_ROOT_USER
+  minio_root_password:
+    environment: MINIO_ROOT_PASSWORD
+  postgres_mlflow_user:
+    environment: POSTGRES_MLFLOW_USER
+  postgres_mlflow_password:
+    environment: POSTGRES_MLFLOW_PASSWORD
+
+name: estimator
+
+services:
+  
+  # Minio Object Storage
+  minio:
+    image: minio/minio:${MINIO_IMAGE:-RELEASE.2025-09-07T16-13-09Z-cpuv1}
+    ports:
+      - "${MINIO_HOST_API_PORT:-9000}:9000" # API port
+      - "${MINIO_HOST_CONSOLE_PORT:-9001}:9001" # console port
+    command: server /data --console-address ":9001"
+    secrets:
+      - minio_root_user
+      - minio_root_password
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
+      MINIO_HOST: ${MINIO_HOST:-minio}
+    volumes:
+      - ${MINIO_DATA_PATH:-./minio/data}:/data
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:9000/$${MINIO_HOST}/health/live" ]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+
+
+  # Minio Client to initialize buckets, exits after creation
+  minio-init:
+    image: minio/mc:${MINIO_MC_IMAGE:-RELEASE.2025-08-13T08-35-41Z}
+    depends_on:
+      minio:
+        condition: service_healthy
+    secrets:
+      - minio_root_user
+      - minio_root_password
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
+      MINIO_BUCKET_NAMES: "${MINIO_DATA_BUCKET:-source-data},${MINIO_MLFLOW_BUCKET:-mlflow}"
+      MINIO_HOST: ${MINIO_HOST:-minio}
+    entrypoint: > 
+      /bin/sh -c "
+        mc alias set minio http://$${MINIO_HOST}:9000 $(cat /run/secrets/minio_root_user) $(cat /run/secrets/minio_root_password);
+        for bucket in $(echo \"$${MINIO_BUCKET_NAMES}\" | tr \",\" \"\\n\" ); 
+            do mc mb minio/\"$${bucket}\" --ignore-existing; 
+            mc anonymous set public minio/\"$${bucket}\";
+        done;
+      "
+
+  mlflow-postgres:
+    image: postgres:15
+    secrets:
+      - postgres_mlflow_user
+      - postgres_mlflow_password
+    environment:
+      POSTGRES_USER_FILE: /run/secrets/postgres_mlflow_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_mlflow_password
+      POSTGRES_DB: ${POSTGRES_DB:-mlflow}
+    volumes:
+      - ${POSTGRES_DATA_PATH:-./postgres/data}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $(cat $${POSTGRES_USER_FILE})"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+    
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:${MLFLOW_VERSION:-v3.8.1}
+    depends_on:
+      mlflow-postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    secrets:
+      - minio_root_user
+      - minio_root_password
+      - postgres_mlflow_user
+      - postgres_mlflow_password
+
+    environment:
+      
+      # S3/MinIO settings
+      MLFLOW_S3_ENDPOINT_URL: "http://${MINIO_HOST:-minio}:${MINIO_HOST_API_PORT:-9000}"
+      MLFLOW_ARTIFACTS_DESTINATION: "s3://${MINIO_MLFLOW_BUCKET:-mlflow}"
+      
+      AWS_ACCESS_KEY_ID_FILE: /run/secrets/minio_root_user
+      AWS_SECRET_ACCESS_KEY_FILE: /run/secrets/minio_root_password
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+
+      MLFLOW_S3_IGNORE_TLS: "true"
+      
+      # Server host/port
+      MLFLOW_HOST: ${MLFLOW_HOST:-0.0.0.0}
+      MLFLOW_PORT: ${MLFLOW_PORT:-5000}
+
+      # Postgres settings
+      POSTGRES_DB: ${POSTGRES_DB:-mlflow}
+
+    command:
+      - /bin/bash
+      - -c
+      - |
+        pip install --no-cache-dir psycopg2-binary boto3
+        mlflow server \
+          --backend-store-uri "postgresql://$(cat /run/secrets/postgres_mlflow_user):$(cat /run/secrets/postgres_mlflow_password)@mlflow-postgres:5432/$${POSTGRES_DB}" \
+          --artifacts-destination "$${MLFLOW_ARTIFACTS_DESTINATION}" \
+          --serve-artifacts \
+          --host "$${MLFLOW_HOST}" \
+          --port "$${MLFLOW_PORT}"
+    ports:
+      - "${MLFLOW_PORT:-5000}:${MLFLOW_PORT:-5000}"
+    healthcheck:
+      test:
+         [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:${MLFLOW_PORT:-5000}/health')",
+         ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
