@@ -85,6 +85,7 @@ x-airflow-common:
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
 
     # Set MinIO environment variables
+    MINIO_HOST: ${MINIO_HOST:-minio}
     MINIO_API_PORT: "9000"
     MINIO_REGION: ${MINIO_REGION:-us-east-1}
     MINIO_DATA_BUCKET: ${MINIO_DATA_BUCKET:-source-data}

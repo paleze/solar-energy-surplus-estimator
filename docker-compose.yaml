@@ -122,6 +122,7 @@ services:
         mlflow server \
           --backend-store-uri "postgresql://$(cat /run/secrets/postgres_mlflow_user):$(cat /run/secrets/postgres_mlflow_password)@mlflow-postgres:5432/$${POSTGRES_DB}" \
           --artifacts-destination "$${MLFLOW_ARTIFACTS_DESTINATION}" \
+          --allowed-hosts "mlflow:*,localhost:*" \
           --serve-artifacts \
           --host "$${MLFLOW_HOST}" \
           --port "$${MLFLOW_PORT}"

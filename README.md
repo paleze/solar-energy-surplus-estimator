@@ -11,7 +11,7 @@ To start the airflow stack for the first time:
     - set env var `AIRFLOW_UID` to the current user id and append it to a local `.env` file
     - create airflow folders according in `AIRFLOW_PROJ_DIR`
 
-- run `docker compose up -d` to start stack containers
+- run `docker compose up -d` to start stack containers (you can have a nice view of running containers by executing `watch 'docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"` in another terminal)
 - open the `Minio`, `MlFlow`, and `Airflow` web pages on `localhost` at the corresponding configured ports
 
 To stop the stack run `docker compose stop`
