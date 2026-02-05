@@ -21,3 +21,9 @@ for dir in $(echo ${airflow_dirs} | tr "," "\n"); do
         mkdir -p ${airflow_proj_dir}/$dir
     fi
 done
+
+# Copy the solar estimator DAG to the Airflow dags folder
+echo "Copying solar estimator DAG to Airflow dags folder..."
+cp solar-estimator-model-dag.py ${airflow_proj_dir}/dags
+
+echo "Airflow setup completed."

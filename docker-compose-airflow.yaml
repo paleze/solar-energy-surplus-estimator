@@ -59,6 +59,9 @@ x-airflow-common:
       AIRFLOW_VERSION: ${AIRFLOW_VERSION:-3.1.6}
   env_file:
     - ${ENV_FILE_PATH:-.env}
+  secrets:
+      - minio_root_user
+      - minio_root_password
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -80,6 +83,21 @@ x-airflow-common:
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
     # The following line can be used to set a custom config file, stored in the local config folder
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
+
+    # Set MinIO environment variables
+    MINIO_HOST: ${MINIO_HOST:-minio}
+    MINIO_API_PORT: "9000"
+    MINIO_REGION: ${MINIO_REGION:-us-east-1}
+    MINIO_DATA_BUCKET: ${MINIO_DATA_BUCKET:-source-data}
+
+    #set MLflow environment variables
+    MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+  
+    # Set application environment variables
+    SITE_LATITUDE: ${SITE_LATITUDE:-45.704178167781265}
+    SITE_LONGITUDE: ${SITE_LONGITUDE:-9.663174137924273}
+    SITE_TIMEZONE: ${SITE_TIMEZONE:-Europe/Berlin}
+
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
@@ -105,6 +123,10 @@ secrets:
     environment: POSTGRES_AIRFLOW_USER
   postgres_airflow_password:
     environment: POSTGRES_AIRFLOW_PASSWORD
+  minio_root_user:
+    environment: MINIO_ROOT_USER
+  minio_root_password:
+    environment: MINIO_ROOT_PASSWORD
 
 
 services:
@@ -235,9 +257,7 @@ services:
       - -c
       - |
         # export variables from secrets
-        export _AIRFLOW_WWW_USER_USERNAME=$$(cat /run/secrets/airflow_user)
-        export _AIRFLOW_WWW_USER_PASSWORD=$$(cat /run/secrets/airflow_password)
-
+        
         if [[ -z "${AIRFLOW_UID}" ]]; then
           echo
           echo -e "\033[1;33mWARNING!!!: AIRFLOW_UID not set!\e[0m"
@@ -314,9 +334,6 @@ services:
         ls -la /opt/airflow/{logs,dags,plugins,config}
 
     # yamllint enable rule:line-length
-    secrets:
-      - airflow_user
-      - airflow_password
     environment:
       <<: *airflow-common-env
       _AIRFLOW_DB_MIGRATE: 'true'
