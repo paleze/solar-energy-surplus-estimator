@@ -54,6 +54,7 @@ x-airflow-common:
   image: ${AIRFLOW_EXTENDED_IMAGE:-estimator-airflow-extended:latest}
   build:
     context: .
+    dockerfile: airflow.Dockerfile
     args:
       AIRFLOW_IMAGE_NAME: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.1.6}
       AIRFLOW_VERSION: ${AIRFLOW_VERSION:-3.1.6}

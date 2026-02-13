@@ -139,3 +139,43 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+  app-serving:
+    image: ${APP_SERVING_IMAGE:-estimator-app-serving:latest}
+    build:
+      context: .
+      dockerfile: app-serving.Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13.12-slim}
+    depends_on:
+      mlflow:
+        condition: service_healthy
+
+    environment:
+      
+      # Mlflow
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+
+      # Evaluation context data
+      SITE_LATITUDE: ${SITE_LATITUDE:-45.704178167781265}
+      SITE_LONGITUDE: ${SITE_LONGITUDE:-9.663174137924273}
+      SITE_TIMEZONE: ${SITE_TIMEZONE:-Europe/Berlin}
+      BATTERY_CAPACITY_KWH: ${BATTERY_CAPACITY_KWH:-13.5}
+
+    command:
+      - /bin/bash
+      - -c
+      - streamlit --log_level debug run app-serving.py
+    ports:
+      - "${APP_SERVING_HOST_PORT:-8501}:${APP_SERVING_PORT:-8501}"
+    healthcheck:
+      test:
+         [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; res=urllib.request.urlopen('http://localhost:${APP_SERVING_PORT:-8501}/_stcore/health')",
+         ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
