@@ -24,6 +24,6 @@ done
 
 # Copy the solar estimator DAG to the Airflow dags folder
 echo "Copying solar estimator DAG to Airflow dags folder..."
-cp solar-estimator-model-dag.py ${airflow_proj_dir}/dags
+cp solar-estimator-model-dag.py weather_data.py ${airflow_proj_dir}/dags
 
 echo "Airflow setup completed."
