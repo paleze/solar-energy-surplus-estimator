@@ -13,16 +13,16 @@ import pandas as pd
 import numpy as np
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.metrics import root_mean_squared_error 
+
 import xgboost as xgb
+from hyperopt import fmin, tpe, hp, STATUS_OK, Trials # use hyperpot package to perform parameter tuning
+from hyperopt.pyll import scope
 
 from minio import Minio
 
-import openmeteo_requests
-import requests_cache
-from retry_requests import retry
+from mlflow import mlflow, MlflowClient
 
-import mlflow
-
+import weather_data as wd
 
 
 default_args = {
@@ -181,15 +181,15 @@ def transform_data(ti):
     df['total_home_usage']=df_raw['consumer_energy_imported_from_grid']+df_raw['consumer_energy_imported_from_solar']+df_raw['consumer_energy_imported_from_battery']
 
     # Remove hours at early morning or late evening where no solar production can occur
-    df = df[ ( (df.time.astype(str)>'06:00:00') & (df.time.astype(str)<'22:00:00') )]
+    df = df[ ( (df.time.astype(str)>='06:00:00') & (df.time.astype(str)<'21:00:00') )]
 
     # compute solar surplus (at minimum it must be 0)
     df['solar_surplus']=df['solar_energy_exported'] - df['total_home_usage']
     df.solar_surplus=df.solar_surplus.apply(lambda x: max(0,x))
 
     # Get min and max dates
-    start_date=min(df.timestamp).date()
-    end_date=max(df.timestamp).date()
+    start_date=min(df.timestamp).date().strftime("%Y-%m-%d")
+    end_date=max(df.timestamp).date().strftime("%Y-%m-%d")
 
     logging.info(f"Transformed data frame has {len(df)} rows")
     
@@ -197,10 +197,10 @@ def transform_data(ti):
 
 
 
-def get_historical_weather(ti):
+def get_weather_data(ti):
 
     """
-    Fetch historical weather data from Open-Meteo API according to source data date range
+    Fetch weather data from Open-Meteo API according to source data date range
     """
 
     start_date, end_date, _ = ti.xcom_pull(task_ids='transform_data')
@@ -217,46 +217,7 @@ def get_historical_weather(ti):
 
     try:
 
-        # Setup the Open-Meteo API client with cache and retry on error
-        cache_session = requests_cache.CachedSession('.cache', expire_after = -1)
-        retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
-        openmeteo = openmeteo_requests.Client(session = retry_session)
-    
-        # Make sure all required weather variables are listed here
-        # The order of variables in hourly or daily is important to assign them correctly below
-        url = "https://archive-api.open-meteo.com/v1/archive"
-        params = {
-            "latitude": {latitude},
-            "longitude": {longitude},
-            "start_date": {start_date},
-            "end_date": { (end_date if end_date is not None else start_date) },
-            "hourly": ["weather_code", "cloud_cover", "temperature"],
-            "timezone": {timezone},
-        }
-        responses = openmeteo.weather_api(url, params=params)
-        
-        # Process first location. Add a for-loop for multiple locations or weather models
-        response = responses[0]
-        
-        # Process hourly data. The order of variables needs to be the same as requested.
-        hourly = response.Hourly()
-        
-        hourly_weather_code = hourly.Variables(0).ValuesAsNumpy()
-        hourly_cloud_cover = hourly.Variables(1).ValuesAsNumpy()
-        hourly_temperature = hourly.Variables(2).ValuesAsNumpy()
-        
-        hourly_data = {"timestamp": pd.date_range(
-            start = pd.to_datetime(hourly.Time(), unit = "s", utc = False),
-            end =  pd.to_datetime(hourly.TimeEnd(), unit = "s", utc = False),
-            freq = pd.Timedelta(seconds = hourly.Interval()),
-            inclusive = "left"
-        )}
-        
-        hourly_data["weather_code"] = hourly_weather_code
-        hourly_data["cloud_cover"] = hourly_cloud_cover
-        hourly_data["temperature"] = hourly_temperature
-        
-        hourly_df = pd.DataFrame(data = hourly_data)
+        hourly_df = wd.get_weather_data(start_date, end_date, latitude, longitude, timezone)
 
         logging.info(f"Retrieved {len(hourly_df)} hourly weather data points")
         
@@ -273,7 +234,7 @@ def merge_historical_weather(ti):
     Merge historical weather data with transformed source data
     """
     _, _, df = ti.xcom_pull(task_ids='transform_data')
-    hourly_weather_df = ti.xcom_pull(task_ids='get_historical_weather')
+    hourly_weather_df = ti.xcom_pull(task_ids='get_weather_data')
 
     # merge energy data with weather historical data on timestamp
     df['timestamp'] = pd.to_datetime(df['timestamp'], utc=False)
@@ -308,6 +269,77 @@ def merge_historical_weather(ti):
 
 
 
+def get_best_model():
+
+    runs = mlflow.search_runs(filter_string="status='FINISHED'")
+    best_run = runs.loc[ runs['metrics.rmse_test'].idxmin() ]
+    best_run_id = best_run['run_id']
+    best_run_rmse = best_run['metrics.rmse_test']
+    logging.info(f'best run_id: {best_run_id}, rmse: {best_run_rmse}')
+
+    model_filter_string=f"source_run_id='{best_run_id}'"
+    models = mlflow.search_logged_models(filter_string=model_filter_string)
+    best_model_id=models.at[0,"model_id"]
+    
+    return best_run_id, best_run_rmse, best_model_id
+
+
+
+def register_best_model(client, dv):
+        
+    # Get best model
+    best_run_id, best_run_rmse, best_model_id = get_best_model()
+
+    model_name = "solar-surplus-estimator"
+    model_version_alias = "production"
+
+    # Get current registered model
+    try:
+
+        model_info = client.get_model_version_by_alias(model_name, model_version_alias)
+
+    except mlflow.exceptions.RestException as e:
+        # Model name or alias not found
+        model_info = None
+
+    if model_info is not None and model_info.run_id==best_run_id:
+        
+        best_version = model_info.version
+        logging.info(f"Current model {model_name} with version {best_version} is still the best one")
+
+    else:
+
+        # register and set alias to a new model
+        model_uri = f"runs:/{best_run_id}/model"
+        best_version = mlflow.register_model(model_uri, model_name).version
+    
+        client.set_registered_model_alias(
+            model_name, model_version_alias, best_version
+        )
+
+        # set temp local model path
+        model_path=Path("/tmp/models")
+        model_path.mkdir(parents=True, exist_ok=True)
+        preprocessor_file=Path.joinpath(model_path,"preprocessor.b")
+
+        # Save preprocessor DictionaryVectorzizer as a best run artifact
+        with open(preprocessor_file, "wb") as f_out:
+            pickle.dump(dv, f_out)
+
+        mlflow.log_artifact(preprocessor_file, artifact_path="preprocessor", run_id=best_run_id)
+
+        logging.info(f"Registered model {model_name} with new version {best_version} has now alias {model_version_alias}")
+
+    
+    return { 
+            "best_run_id": best_run_id,
+            "best_run_rmse": best_run_rmse,
+            "best_model_id": best_model_id,
+            "best_version": best_version
+    }
+        
+
+
 def train_model(ti):
 
     """
@@ -317,8 +349,8 @@ def train_model(ti):
     df_merge = ti.xcom_pull(task_ids='merge_historical_weather')
 
     # Set features
-    categorical=['time', 'month','weather_code']
-    numerical=[ 'cloud_cover', 'temperature' ]
+    categorical=['time', 'month','weather_code','cloud_cover']
+    numerical=[ 'temperature' ]
 
     # Convert categorical features to string type to prepare for DictVectorizer
     df_merge[categorical] = df_merge[categorical].astype(str)
@@ -338,63 +370,74 @@ def train_model(ti):
 
     # Same approach for test data set
     X_Test_dicts = X_Test_df[categorical+numerical].to_dict(orient='records')
-    X_test = dv.fit_transform(X_Test_dicts)
+    X_test = dv.transform(X_Test_dicts)
 
     target = 'solar_surplus'
     y_train = X_Train_df[target].values
     y_test = X_Test_df[target].values
 
     # Set experiment tracking
-    experiment_name="solar-surplus-experiment"
+    experiment_name="solar-surplus-estimator-experiment"
     mlflow_tracking_uri=get_secret_from_env_or_file("MLFLOW_TRACKING_URI")
     mlflow.set_tracking_uri(mlflow_tracking_uri)
     mlflow.set_experiment(experiment_name)
     
-    # set temp local model path
-    model_path=Path("/tmp/models")
-    model_path.mkdir(parents=True, exist_ok=True)
-    preprocessor_file=Path.joinpath(model_path,"preprocessor.b")
+    # Get MlFlow Client
+    client = MlflowClient(mlflow_tracking_uri)
 
-    logging.info("Start traininig model ...")
-    with mlflow.start_run():
-    
-        X_Train_dm = xgb.DMatrix(X_train, label=y_train)
-        X_test_dm = xgb.DMatrix(X_test, label=y_test)
+    # Enable auto logging
+    mlflow.xgboost.autolog()
 
-        # Best params from offline hyperparameter tuning session
-        best_params = {
-            "learning_rate": 0.06442636015018084,
-            "max_depth": 17,
-            "min_child_weight": 11.057750768573072,
-            "objective": "reg:squarederror",
-            "reg_alpha": 0.07238551460828992,
-            "reg_lambda": 0.06289038778129306,
-            "seed": 42
-        }
+    logging.info("Start traininig model with hyperparameters optimization ...")
 
-        mlflow.log_params(best_params)
+    X_Train_dm = xgb.DMatrix(X_train, label=y_train)
+    X_test_dm = xgb.DMatrix(X_test, label=y_test)
 
-        booster = xgb.train(
-            params=best_params,
-            dtrain=X_Train_dm,
-            num_boost_round=100,
-            evals=[(X_test_dm, 'validation')],
-            early_stopping_rounds=50
-        )
+    # tuning parameters (see https://hyperopt.github.io/hyperopt/ for reference )
+    search_space = {
+        'max_depth': scope.int(hp.quniform('max_depth', 4, 100, 1)),
+        'learning_rate': hp.loguniform('learning_rate', -3, 0),  # explore solutions from exp(-3) and exp(0)
+        'reg_alpha': hp.loguniform('reg_alpha', -5, -1),
+        'reg_lambda': hp.loguniform('reg_lambda', -6, -1),
+        'min_child_weight': hp.loguniform('min_child_weight', -1, 3),
+        'objective': 'reg:squarederror',
+        'seed': 42
+    }
 
-        y_pred = booster.predict(X_test_dm)
-        rmse = root_mean_squared_error(y_test, y_pred)
-        mlflow.log_metric("rmse_test", rmse)
+    def hyperparameter_objective(params):
 
-        logging.info(f"Model training ended, rmse = {rmse}")
+        with mlflow.start_run():
 
-        with open(preprocessor_file, "wb") as f_out:
-           pickle.dump(dv, f_out)
+            model_type="xgboost"
+            mlflow.set_tag("model_type", model_type)
+            mlflow.log_params(params)
 
-        mlflow.log_artifact(preprocessor_file, artifact_path="preprocessor")
+            mlflow.xgboost.autolog()
+            booster = xgb.train(
+                params=params,
+                dtrain=X_Train_dm,
+                num_boost_round=1000, # Maximum number of iterations for hyperparameter tuning
+                evals=[(X_test_dm, 'validation')],
+                early_stopping_rounds=50 # Stop after 50 iterations with no improvement
+            )
+            y_pred = booster.predict(X_test_dm)
+            rmse = root_mean_squared_error(y_test, y_pred)
+            mlflow.log_metric("rmse_test", rmse)
 
-        mlflow.xgboost.log_model(booster, name="solar-energy-surplus-predictor")
+        return {'loss': rmse, 'status': STATUS_OK}
 
+    # Start the hyperparameter tuning
+    best_result = fmin(
+        fn=hyperparameter_objective,
+        space=search_space,
+        algo=tpe.suggest,
+        max_evals=20, # number of hyperparameters tuning runs
+        trials=Trials()
+    )
+
+        
+    res = register_best_model(client, dv)
+    logging.info(f"Model training completed - best_run_id: {res["best_run_id"]}, best rmse: {res["best_run_rmse"]}, best model id: {res["best_model_id"]}, best version: {res["best_version"]}")
 
 
 
@@ -423,9 +466,9 @@ with DAG(
         python_callable=transform_data,
     )
 
-    get_historical_weather_task = PythonOperator(
-        task_id='get_historical_weather',
-        python_callable=get_historical_weather,
+    get_weather_data_task = PythonOperator(
+        task_id='get_weather_data',
+        python_callable=get_weather_data,
     )
 
     merge_historical_weather_task = PythonOperator(
@@ -438,4 +481,4 @@ with DAG(
         python_callable=train_model,
     )
 
-fetch_data_task >> transform_data_task >> get_historical_weather_task >> merge_historical_weather_task >> train_model_task
+fetch_data_task >> transform_data_task >> get_weather_data_task >> merge_historical_weather_task >> train_model_task
