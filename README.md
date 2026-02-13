@@ -21,3 +21,13 @@ To completely remove the stack run `cleanup.sh` to perform these actions:
 - take the stack down and remove volumes and orphans ( executes `docker compose down --volumes --remove-orphans`)
 - remove all airflow folders from `AIRFLOW_PROJ_DIR` (or from current folder if not set)
 
+
+# Model serving application
+Model serving is implemented with a Streamlit application accessible by default at `http://localhost:8501`.
+In order to get an energy surplus estimate prediction, the user must enter this information:
+- day of interest (default current day)
+- time of the day (default current time)
+- the home battery capacity (default 13.5 Kwh)
+- Current battery capacity usage
+
+By submitting the "Estimate surplus" button, the amount of predicted solar energy surplus is returned, i.e. the energy that will be produced by the photovoltaic panels until the end of the day and not immediately consumed by home appliances. This value is computed by summing up the single energy surplus quantities predicted in 30-minutes steps from the given time of day until 9:00 pm according to those produced in the same month, time of day and weather conditions according to past data. As this surplus is stored in the home battery, the goal is then to predict how much energy will eventually overflow the battery capacity and thus be exported to the grid. This is the amount of energy that could be used for other non house-related appliances, for example charging an electric car.
