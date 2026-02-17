@@ -16,12 +16,16 @@ on:
 jobs:
 
   build:
+  
     runs-on: ubuntu-latest
     
     steps:
 
       - name: checkout code
         uses: actions/checkout@v3
+
+      - name: set env variables from .env.demo file
+        run: cp .env.demo .env
 
       - name: create docker-compose stack
         timeout-minutes: 10
@@ -31,7 +35,8 @@ jobs:
         run: if [ docker compose ps | grep -i "(unhealthy)" ]; then echo "Some services are unhealthy" && exit 1; else echo "All services are healthy"; fi
 
   
-  test-UI-accessibility:
+  test-ui-accessibility:
+
     runs-on: ubuntu-latest
     needs: build
     strategy:
