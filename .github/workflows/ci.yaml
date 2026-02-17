@@ -24,8 +24,10 @@ jobs:
       - name: set env variables from .env.demo file
         run: cp .env.demo .env
 
-      - name: setup airflow
-        run: bash -c setup-airflow.sh
+      - name: run airflow setup script
+        run: |
+          chmod +x ./setup-airflow.sh
+          ./setup-airflow.sh
       
       - name: create docker-compose stack
         timeout-minutes: 10
