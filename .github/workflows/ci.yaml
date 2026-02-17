@@ -1,8 +1,5 @@
 on:
     workflow_dispatch:
-    push:
-      branches:
-        - main
     pull_request:
       branches:
         - main
@@ -16,7 +13,7 @@ on:
 jobs:
 
   build:
-  
+
     runs-on: ubuntu-latest
     
     steps:
@@ -27,6 +24,9 @@ jobs:
       - name: set env variables from .env.demo file
         run: cp .env.demo .env
 
+      - name: setup airflow
+        run: bash -c setup-airflow.sh
+      
       - name: create docker-compose stack
         timeout-minutes: 10
         run: docker compose up -d --build
