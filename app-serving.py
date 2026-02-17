@@ -1,17 +1,14 @@
 import streamlit as st
 
 
-
 import numpy as np
 import pandas as pd
-
 import xgboost as xgb
 
 
 from datetime import date, datetime, timedelta
 import os
 import logging
-
 import pickle
 
 from mlflow import mlflow, MlflowClient
@@ -20,45 +17,52 @@ import weather_data as wd
 
 
 
+def init_mlflow():
+
+    """
+    Initialize mlflow
+    """
+
+    global mlflow_tracking_uri
+    mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI","http://localhost:5000")
+
+    global experiment_name
+    experiment_name="solar-surplus-estimator-experiment"
+
+    global model_name
+    model_name = "solar-surplus-estimator"
+
+    global model_production_alias
+    model_production_alias = "production"
+
+    mlflow.set_tracking_uri(mlflow_tracking_uri)
+    mlflow.set_experiment(experiment_name)
+
+    # Get MlFlow Client
+    global client
+    client = MlflowClient(mlflow_tracking_uri)
+
+
+
 @st.cache_resource
 def get_model_artifacts():
 
     """
-    Return from mlflow the best model artifacrts to be used for prediction
+    Return the production model artifacts to be used for prediction
     """
     try:
 
-        # Get best model metadata
+        # get a model version by alias
+        mlflow_version = client.get_model_version_by_alias(model_name, model_production_alias)
 
-        mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI","http://localhost:5000")
-        experiment_name="solar-surplus-estimator-experiment"
+        if mlflow_version is None:
+             raise RuntimeError(f"No version found for model '{model_name}' with alias '{model_production_alias}', run the model pipeline to create one")
 
-        mlflow.set_tracking_uri(mlflow_tracking_uri)
-        mlflow.set_experiment(experiment_name)
-
-        runs = mlflow.search_runs(filter_string="status='FINISHED'")
-
-        if len(runs)==0:
-             raise RuntimeError(f"Model runs not found for experiment {experiment_name}")
-
-        best_run = runs.loc[ runs['metrics.rmse_test'].idxmin() ]
-        best_run_id = best_run['run_id']
-        best_run_rmse = best_run['metrics.rmse_test']
-        
-        model_filter_string=f"source_run_id='{best_run_id}'"
-        models = mlflow.search_logged_models(filter_string=model_filter_string)
-        best_model_id=models.at[0,"model_id"]
-        
-
-        logging.info(f'Best Model metadata: run_id: {best_run_id}, rmse: {best_run_rmse}, model_id: {best_model_id}')
-        
         # Load model
-        logged_model=f"models:/{best_model_id}"
-        booster = mlflow.xgboost.load_model(logged_model)
+        booster = mlflow.xgboost.load_model(f"models:/{model_name}@{model_production_alias}")
         
         # Load data preprocesser DictionaryVectorizer
-        client = MlflowClient(mlflow_tracking_uri)
-        path = client.download_artifacts(run_id=best_run_id, path="preprocessor/preprocessor.b")
+        path = client.download_artifacts(run_id=mlflow_version.run_id, path="preprocessor/preprocessor.b")
 
         with open(path, 'rb') as f_out:
             dv = pickle.load(f_out)
@@ -104,8 +108,6 @@ def predict(df_eval) -> float:
         y_pred_bottomed = np.maximum(y_pred,z)
         solar_surplus_prediction = sum(y_pred_bottomed)
 
-        #st.info(f"y_pred_bottomed: {y_pred_bottomed}")
-        
         logging.info(f"Solar surplus predictions: {y_pred}")
         logging.info(f"Solar surplus predictions (zero-bottmoed): {y_pred_bottomed}")
         logging.info(f"Total solar surplus prediction for the rest of day: {solar_surplus_prediction}")
@@ -116,7 +118,15 @@ def predict(df_eval) -> float:
         raise RuntimeError(f"Failed to perform model predictions: {e}") from e
 
 
+
 def get_evaluation_data(evaluation_date, evaluation_time):
+
+    """
+    Return evaluation data to be used for model prediction, including weather forecast and features engineering
+    
+    :param evaluation_date: Date for which the weather forecast is retrieved and features are computed
+    :param evaluation_time: Intial time of the day from which the weather forecast is retrieved and features are computed
+    """
 
     latitude=float(os.getenv("SITE_LATITUDE", "45.704178167781265"))
     longitude=float(os.getenv("SITE_LONGITUDE", "9.663174137924273"))
@@ -152,14 +162,15 @@ def get_evaluation_data(evaluation_date, evaluation_time):
 
     df_eval = pd.concat([df_eval, df_eval_30]).sort_values('time')
 
-    #st.info(f"df_eval: {df_eval}")
-
     return df_eval
 
 
 def main():
 
     try:
+
+        # Initialize mlflow
+        init_mlflow()
 
         # Get environment variables
         battery_full_capacity = float(os.getenv("BATTERY_CAPACITY_KWH",13.5))
@@ -178,16 +189,16 @@ def main():
         evaluation_date = st.date_input("Date (YYYY/MM/dd):", value=current_date)
         evaluation_time = st.time_input("Start time (HH:MM):", value=current_time)
         battery_full_capacity = st.number_input("Battery capacity (KWh):", min_value=0.0, step=0.1, value=battery_full_capacity, format="%.1f")
-        battery_usage_percentage = st.number_input("Current battery usage (%):", min_value=0, max_value=100)
+        battery_usage_percentage = st.number_input("Battery capacity usage (%):", min_value=0, max_value=100)
         
         # Make prediction
         if st.button("Estimate Surplus", type="primary"):
 
-            #st.info(f"Getting evaluation data for {evaluation_date} {evaluation_time}")
+            st.info(f"Downloading weather data...")
 
             # Process input data to be used for model prediction
             df_eval = get_evaluation_data(evaluation_date, evaluation_time)
-
+     
             st.info("Performing prediction...")
 
             # Compute model prediction
@@ -205,7 +216,7 @@ def main():
             st.subheader("Prediction Results")
             col1, col2, col3 = st.columns(3)
             col1.metric("Predicted solar energy surplus generated until sunset (KWh): ", f"{solar_surplus_prediction}", format="%.2f")
-            col2.metric("Predicted battery usage at sunset with stored solar surplus (%): ", f"{battery_predicted_usage}")
+            col2.metric("Predicted battery capacity usage at sunset (including stored solar surplus) (%): ", f"{battery_predicted_usage}")
             col3.metric("Predicted solar energy surplus exported to the grid (KWh):", f"{solar_surplus_to_grid}",format="%.2f")
             
                     
