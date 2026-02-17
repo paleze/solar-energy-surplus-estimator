@@ -1,0 +1,54 @@
+on:
+    workflow_dispatch:
+    push:
+      branches:
+        - main
+    pull_request:
+      branches:
+        - main
+      types:
+        - closed
+      paths-ignore: # ignore pull requests on documentation files
+        - README.md 
+
+
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+
+      - name: checkout code
+        uses: actions/checkout@v3
+
+      - name: create docker-compose stack
+        timeout-minutes: 10
+        run: docker compose up -d --build
+
+      - name: check all services are healthy
+        run: if [ docker compose ps | grep -i "(unhealthy)" ]; then echo "Some services are unhealthy" && exit 1; else echo "All services are healthy"; fi
+
+  
+  test-UI-accessibility:
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+        matrix:
+          service:
+            - minio
+            - mlflow
+            - airflow
+            - app-serving
+          port: # use default ports for each service
+            - 9000
+            - 5000
+            - 8080
+            - 8501
+    
+    steps:
+
+      - name: check all service UIs are accessible
+        run: if [ ! curl -f http://localhost:${{ matrix.port }} ]; then echo "${{ matrix.service }} UI is not accessible" && exit 1; else echo "${{ matrix.service }} UI is accessible"; fi
+
