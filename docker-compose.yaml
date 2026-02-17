@@ -165,7 +165,7 @@ services:
     command:
       - /bin/bash
       - -c
-      - streamlit --log_level debug run app-serving.py
+      - streamlit run app-serving.py
     ports:
       - "${APP_SERVING_HOST_PORT:-8501}:${APP_SERVING_PORT:-8501}"
     healthcheck:
