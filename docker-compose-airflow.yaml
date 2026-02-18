@@ -60,9 +60,6 @@ x-airflow-common:
       AIRFLOW_VERSION: ${AIRFLOW_VERSION:-3.1.6}
   env_file:
     - ${ENV_FILE_PATH:-.env}
-  secrets:
-      - minio_root_user
-      - minio_root_password
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -124,10 +121,6 @@ secrets:
     environment: POSTGRES_AIRFLOW_USER
   postgres_airflow_password:
     environment: POSTGRES_AIRFLOW_PASSWORD
-  minio_root_user:
-    environment: MINIO_ROOT_USER
-  minio_root_password:
-    environment: MINIO_ROOT_PASSWORD
 
 
 services:
@@ -147,7 +140,7 @@ services:
       interval: 10s
       retries: 5
       start_period: 5s
-    restart: always
+    restart: unless-stopped
 
   redis:
     # Redis is limited to 7.2-bookworm due to licencing change
@@ -161,7 +154,7 @@ services:
       timeout: 30s
       retries: 50
       start_period: 30s
-    restart: always
+    restart: unless-stopped
 
   airflow-apiserver:
     <<: *airflow-common
@@ -174,7 +167,7 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
-    restart: always
+    restart: unless-stopped
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:
@@ -189,7 +182,7 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
-    restart: always
+    restart: unless-stopped
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:
@@ -204,7 +197,7 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
-    restart: always
+    restart: unless-stopped
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:
@@ -227,7 +220,7 @@ services:
       # Required to handle warm shutdown of the celery workers properly
       # See https://airflow.apache.org/docs/docker-stack/entrypoint.html#signal-propagation
       DUMB_INIT_SETSID: "0"
-    restart: always
+    restart: unless-stopped
     depends_on:
       <<: *airflow-common-depends-on
       airflow-apiserver:
@@ -244,7 +237,7 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
-    restart: always
+    restart: unless-stopped
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:
@@ -373,7 +366,7 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
-    restart: always
+    restart: unless-stopped
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:

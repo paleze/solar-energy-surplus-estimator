@@ -4,7 +4,8 @@ on:
       branches:
         - main
       types:
-        - closed
+        - opened
+        #- closed # TODO: RESTORED AFTER TESTING
       paths-ignore: # ignore pull requests on documentation files
         - README.md 
 
