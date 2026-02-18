@@ -20,7 +20,7 @@ jobs:
     steps:
 
       - name: checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: set env variables from .env.demo file
         run: cp .env.demo .env
@@ -32,7 +32,7 @@ jobs:
       
       - name: build docker-compose stack images
         timeout-minutes: 10
-        run: docker compose build
+        run: docker compose build --no-cache
 
       - name: create docker-compose stack
         timeout-minutes: 5
