@@ -141,7 +141,6 @@ services:
       retries: 3
 
   app-serving:
-    image: ${APP_SERVING_IMAGE:-estimator-app-serving:latest}
     build:
       context: .
       dockerfile: app-serving.Dockerfile

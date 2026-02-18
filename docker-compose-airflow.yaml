@@ -50,13 +50,11 @@ x-airflow-common:
   # In order to add custom dependencies or upgrade provider distributions you can use your extended image.
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
-  #image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.1.6}
-  image: ${AIRFLOW_EXTENDED_IMAGE:-estimator-airflow-extended:latest}
   build:
     context: .
     dockerfile: airflow.Dockerfile
     args:
-      AIRFLOW_IMAGE_NAME: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.1.6}
+      AIRFLOW_IMAGE_NAME: ${AIRFLOW_IMAGE_NAME:-apache/airflow}
       AIRFLOW_VERSION: ${AIRFLOW_VERSION:-3.1.6}
   env_file:
     - ${ENV_FILE_PATH:-.env}
