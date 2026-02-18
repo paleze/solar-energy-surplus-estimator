@@ -30,6 +30,11 @@ jobs:
           chmod +x ./setup-airflow.sh
           ./setup-airflow.sh
 
+      - name: set up Docker Compose
+        uses: docker/setup-compose-action@v1
+        with:
+          version: latest
+
       - name: show docker compose version
         run: docker compose version
 
