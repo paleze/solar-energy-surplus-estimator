@@ -29,10 +29,13 @@ jobs:
         run: |
           chmod +x ./setup-airflow.sh
           ./setup-airflow.sh
-      
+
+      - name: show docker compose version
+        run: docker compose version
+
       - name: build docker-compose stack images
-        timeout-minutes: 10
-        run: docker compose build --no-cache
+        timeout-minutes: 5
+        run: docker compose build
 
       - name: create docker-compose stack
         timeout-minutes: 5
