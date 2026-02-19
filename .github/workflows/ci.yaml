@@ -44,12 +44,12 @@ jobs:
             AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
           push: false
           load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=estimator-custom-airflow-${{hashFiles('airflow-requirements.txt')}}
+          cache-to: type=gha,mode=max,scope=estimator-custom-airflow-${{hashFiles('airflow-requirements.txt')}}
 
       - name: Build and cache app-serving docker image
         uses: docker/build-push-action@v6
-        with:
+        with: 
           context: .
           file: ./app-serving.Dockerfile
           tags: estimator-app-serving:latest
@@ -57,8 +57,8 @@ jobs:
             PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
           push: false
           load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=estimator-app-serving-${{hashFiles('app-serving.py')-${{hashFiles('weather_data.py')}}${{hashFiles('app-serving-requirements.txt')
+          cache-to: type=gha,mode=max,scope=estimator-app-serving-${{hashFiles('app-serving.py')-${{hashFiles('weather_data.py')}}${{hashFiles('app-serving-requirements.txt')
 
       - name: set up Docker Compose
         uses: docker/setup-compose-action@v1
@@ -75,30 +75,35 @@ jobs:
       - name: check all services are healthy
         run: if [ docker compose ps | grep -i "(unhealthy)" ]; then echo "Some services are unhealthy" && exit 1; else echo "All services are healthy"; fi
 
-  
-  test-ui:
-
-    runs-on: ubuntu-latest
-    needs: build
-    continue-on-error: true
-    strategy:
-      matrix:
-        include:
-          - port: 9001
-            service: minio
-          - port: 5000
-            service: mlflow
-          - port: 8080
-            service: airflow
-          - port: 8501
-            service: app-serving
-    steps:
-
-      - name: Running containers
+      - name: check running containers
         run: docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+      - name: check service
+        run: curl -f http://localhost:5000
+  
+  # test-ui:
+
+  #   runs-on: ubuntu-latest
+  #   needs: build
+  #   continue-on-error: true
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         - port: 9001
+  #           service: minio
+  #         - port: 5000
+  #           service: mlflow
+  #         - port: 8080
+  #           service: airflow
+  #         - port: 8501
+  #           service: app-serving
+  #   steps:
+
+  #     - name: Running containers
+  #       run: docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"
         
-      - name: Check endpoints
-        run: |
-          echo "Checking if ${{matrix.service}} is accessible on port ${{matrix.port}}"
-          curl -f http://localhost:${{ matrix.port }}
+  #     - name: Check endpoints
+  #       run: |
+  #         echo "Checking if ${{matrix.service}} is accessible on port ${{matrix.port}}"
+  #         curl -f http://localhost:${{ matrix.port }}
   
