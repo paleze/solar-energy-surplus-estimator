@@ -17,7 +17,7 @@ jobs:
   test-ui:
 
     runs-on: ubuntu-latest
-    needs: build
+    #needs: build
     strategy:
       matrix:
         service: [ "minio,9000", "mlflow,5000", "airflow,8080", "app-serving,8501" ]
@@ -30,11 +30,13 @@ jobs:
         run: |
           IFS=',' read -r svc port <<< "${{matrix.service}}"
           echo "service: $svc, port: $port"
-          curl -s -o /dev/null http://localhost:$port
+          if [ ! curl -f http://localhost:${port} ]; then echo "${svc} UI is not accessible on port ${port}" && exit 1; else echo "${svc} UI is accessible on port ${port}"; fi
           
+
   build:
 
     runs-on: ubuntu-latest
+    needs: test-ui
     steps:
 
       - name: checkout code
