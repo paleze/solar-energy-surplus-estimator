@@ -54,9 +54,9 @@ jobs:
           file: ./airflow.Dockerfile
           push: false
           tags: estimator-custom-airflow:latest
-          build-args: 
-            - AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '-3.1.6' }} 
-            - AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
+          build-args: |
+            AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
+            AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
           cache-from: type=local,src=/tmp/.buildx-cache-airflow
           cache-to: type=local,dest=/tmp/.buildx-cache-airflow,new=true
 
@@ -76,7 +76,8 @@ jobs:
           file: ./app-serving.Dockerfile
           push: false
           tags: estimator-app-serving:latest
-          build-args: PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
+          build-args: |
+            PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
           cache-from: type=local,src=/tmp/.buildx-cache-app-serving
           cache-to: type=local,dest=/tmp/.buildx-cache-app-serving,new=true
 
