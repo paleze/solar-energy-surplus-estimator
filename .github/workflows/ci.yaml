@@ -58,7 +58,7 @@ jobs:
           context: .
           file: ./airflow.Dockerfile
           push: false
-          #load: true
+          load: true
           tags: estimator-custom-airflow:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -140,7 +140,7 @@ jobs:
 
       - name: show docker compose version
         run: docker compose version
-          
+
       - name: create docker-compose stack
         timeout-minutes: 5
         run: docker compose up -d
