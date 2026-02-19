@@ -35,7 +35,7 @@ jobs:
         # env:
         #   TEST_SERVICES: ( "minio,9000" "mlflow,5000" "airflow,8080" "app-serving,8501" )
         #run: TESTS=${{env.TEST_SERVICES}}; for service in "${TESTS[@]}"; do IFS=',' read -r svc port <<< "$service"; curl -s -o /dev/null http://localhost:$port; res=$? ; if [ $res -ne 0 ]; then echo "$svc UI is not accessible on port $port" && exit 1; else echo "$svc UI is accessible on port $port"; fi; done  
-        run: if [ ! curl -f http://localhost:${{ matrix.port }} ]; then echo "${{ matrix.service }} UI is NOT accessible on port ${{ matrix.port }}" && exit 1; else echo "${{ matrix.service }} UI is accessible on port ${{ matrix.port }}"; fi
+        run: if [[ ! curl -f http://localhost:${{ matrix.port }} ]]; then echo "${{ matrix.service }} UI is NOT accessible on port ${{ matrix.port }}" && exit 1; else echo "${{ matrix.service }} UI is accessible on port ${{ matrix.port }}"; fi
         # run: |
         #   IFS=',' read -r svc port <<< "${{matrix.service}}"
         #   echo "service: $svc, port: $port"
