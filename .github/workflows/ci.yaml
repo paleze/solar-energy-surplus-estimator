@@ -13,10 +13,22 @@ on:
 
 jobs:
 
+
+  test-ui-accessibility:
+
+    runs-on: ubuntu-latest
+    #needs: build
+    steps:
+
+      - name: check all service UIs are accessible
+        env:
+          TEST_SERVICES: ( "minio,9000" "mlflow,5000" "airflow,8080" "app-serving,8501" )
+        run: TESTS=${{env.TEST_SERVICES}}; for service in "${TESTS[@]}"; do IFS=',' read -r svc port <<< "$service"; curl -s -o /dev/null http://localhost:$port; res=$? ; if [ $res -ne 0 ]; then echo "$svc UI is not accessible on port $port" && exit 1; else echo "$svc UI is accessible on port $port"; fi; done  
+
   build:
 
     runs-on: ubuntu-latest
-    
+    needs: test-ui-accessibility
     steps:
 
       - name: checkout code
@@ -161,14 +173,4 @@ jobs:
         run: if [ docker compose ps | grep -i "(unhealthy)" ]; then echo "Some services are unhealthy" && exit 1; else echo "All services are healthy"; fi
 
   
-  test-ui-accessibility:
-
-    runs-on: ubuntu-latest
-    needs: build
   
-    steps:
-
-      - name: check all service UIs are accessible
-        env:
-          TEST_SERVICES: ( "minio,9000" "mlflow,5000" "airflow,8080" "app-serving,8501" )
-        run: for service in "${TEST_SERVICES[@]}"; do IFS=',' read -r svc port <<< "$service"; curl -s -o /dev/null http://localhost:$port; res=$? ; if [ $res -ne 0 ]; then echo "$svc UI is not accessible on port $port" && exit 1; else echo "$svc UI is accessible on port $port"; fi; done  
