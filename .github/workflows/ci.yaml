@@ -23,7 +23,7 @@ jobs:
       - name: check all service UIs are accessible
         env:
           TEST_SERVICES: ( "minio,9000" "mlflow,5000" "airflow,8080" "app-serving,8501" )
-        run: for service in "${TEST_SERVICES[@]}"; do IFS=',' read -r svc port <<< "$service"; if [ ! curl -f http://localhost:$port ]; then echo "$svc UI is not accessible on port $port" && exit 1; else echo "$svc UI is accessible on port $port"; fi; done
+        run: for service in "${TEST_SERVICES[@]}"; do IFS=',' read -r svc port <<< "$service"; curl -s -o /dev/null http://localhost:$port; res=$? ; if [ $res -ne 0 ]; then echo "$svc UI is not accessible on port $port" && exit 1; else echo "$svc UI is accessible on port $port"; fi; done
 
   build:
 
