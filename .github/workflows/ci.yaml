@@ -36,25 +36,65 @@ jobs:
       - name: run airflow setup script
         run: ./setup-airflow.sh
 
-      - name: set cache airflow docker image
-        id: cache-custom-airflow-image
-        uses: actions/cache@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Cache airlfow Docker image
+        uses: actions/cache@v3
         with:
-          path: ci/cache/docker/custom-airflow-image
-          key: ${{runner.os}}-custom-airflow-image-${{hashFiles('airflow.Dockerfile','airflow-requirements.txt')}}
+          path: /tmp/.buildx-cache-airflow
+          key: ${{ runner.os }}-airflow-${{hashFiles('airflow.Dockerfile','airflow-requirements.txt')}}
+          # restore-keys: |
+          #   ${{ runner.os }}-buildx-
 
-      - name: update custom airflow image if cache miss
-        timeout-minutes: 5
-        if: steps.cache-custom-airflow-image.outputs.cache-hit != 'true'
-        run: |
-          ./airflow-build.sh
-          mkdir -p ci/cache/docker/custom-airflow-image
-          docker save estimator-custom-airflow:latest -o ./ci/cache/docker/custom-airflow-image/estimator-custom-airflow.tar
+      - name: Build and cache airflow Docker image
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          file: ./airflow.Dockerfile
+          push: false
+          tags: estimator-custom-airflow:latest
+          cache-from: type=local,src=/tmp/.buildx-cache-airflow
+          cache-to: type=local,dest=/tmp/.buildx-cache-airflow,new=true
 
-      - name: load custom airflow image if cache hit
-        if: steps.cache-custom-airflow-image.outputs.cache-hit == 'true'
-        run: |
-          docker image load --input ./ci/cache/docker/custom-airflow-image/estimator-custom-airflow.tar
+
+      - name: Cache app-serving Docker image
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache-app-serving
+          key: ${{ runner.os }}-app-serving-${{hashFiles('app-serving.Dockerfile','app-serving-requirements.txt')}}
+          # restore-keys: |
+          #   ${{ runner.os }}-buildx-
+
+      - name: Build and cache app-serving Docker image
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          file: ./app-serving.Dockerfile
+          push: false
+          tags: estimator-app-serving:latest
+          cache-from: type=local,src=/tmp/.buildx-cache-app-serving
+          cache-to: type=local,dest=/tmp/.buildx-cache-app-serving,new=true
+
+      # - name: set cache airflow docker image
+      #   id: cache-custom-airflow-image
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: ci/cache/docker/custom-airflow-image
+      #     key: ${{runner.os}}-custom-airflow-image-${{hashFiles('airflow.Dockerfile','airflow-requirements.txt')}}
+
+      # - name: update custom airflow image if cache miss
+      #   timeout-minutes: 5
+      #   if: steps.cache-custom-airflow-image.outputs.cache-hit != 'true'
+      #   run: |
+      #     ./airflow-build.sh
+      #     mkdir -p ci/cache/docker/custom-airflow-image
+      #     docker save estimator-custom-airflow:latest -o ./ci/cache/docker/custom-airflow-image/estimator-custom-airflow.tar
+
+      # - name: load custom airflow image if cache hit
+      #   if: steps.cache-custom-airflow-image.outputs.cache-hit == 'true'
+      #   run: |
+      #     docker image load --input ./ci/cache/docker/custom-airflow-image/estimator-custom-airflow.tar
         
       - name: create docker-compose stack
         timeout-minutes: 5
