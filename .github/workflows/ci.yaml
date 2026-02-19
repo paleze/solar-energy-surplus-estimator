@@ -41,7 +41,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ci/cache/docker/custom-airflow-image
-          key: ${{runner.os}}-custom-airflow-image-${{hashfile('airflow.Dockerfile','airflow-requirements.txt')}}
+          key: ${{runner.os}}-custom-airflow-image-${{hashFiles('airflow.Dockerfile','airflow-requirements.txt')}}
 
       - name: update custom airflow image if cache miss
         timeout-minutes: 5
