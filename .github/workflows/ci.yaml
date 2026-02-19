@@ -94,6 +94,9 @@ jobs:
             service: app-serving
     steps:
 
+      - name: Running containers
+        run: docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"
+        
       - name: Check endpoints
         run: |
           echo "Checking if ${{matrix.service}} is accessible on port ${{matrix.port}}"
