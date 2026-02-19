@@ -50,21 +50,33 @@ jobs:
       #     #   ${{ runner.os }}-buildx-
 
 
-      - name: Build and push
+      - name: Build and cache airflow custom docker image
         uses: docker/build-push-action@v6
         with:
-          # push: true
-          # tags: user/app:latest
           context: .
           file: ./airflow.Dockerfile
-          push: false
-          load: true
           tags: estimator-custom-airflow:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           build-args: |
             AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
             AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
+          push: false
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+
+      - name: Build and cache app-serving docker image
+        uses: docker/build-push-action@v6`
+        with:
+          context: .
+          file: ./app-serving.Dockerfile
+          tags: estimator-app-serving:latest
+          build-args: |
+            PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
+          push: false
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       # - name: Build and cache Docker images
       #   uses: docker/build-push-action@v3
