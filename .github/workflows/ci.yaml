@@ -57,8 +57,8 @@ jobs:
             PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
           push: false
           load: true
-          cache-from: type=gha,scope=estimator-app-serving-${{hashFiles('app-serving.py')-${{hashFiles('weather_data.py')}}${{hashFiles('app-serving-requirements.txt')
-          cache-to: type=gha,mode=max,scope=estimator-app-serving-${{hashFiles('app-serving.py')-${{hashFiles('weather_data.py')}}${{hashFiles('app-serving-requirements.txt')
+          cache-from: type=gha,scope=estimator-app-serving-${{hashFiles('app-serving.py')}}-${{hashFiles('weather_data.py')}}-${{hashFiles('app-serving-requirements.txt')}
+          cache-to: type=gha,mode=max,scope=estimator-app-serving-${{hashFiles('app-serving.py')}}-${{hashFiles('weather_data.py')}}-${{hashFiles('app-serving-requirements.txt')}
 
       - name: set up Docker Compose
         uses: docker/setup-compose-action@v1
