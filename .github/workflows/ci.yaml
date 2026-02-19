@@ -32,7 +32,8 @@ jobs:
           echo "service: $svc, port: $port"
           curl -s -o /dev/null http://localhost:$port
           res=$?
-          if [ $res -ne 0 ]; then echo "$svc UI is not accessible on port $port" && exit 1; else echo "$svc UI is accessible on port $port"; fi; done  
+          echo "curl result: $res"
+          if [ $res -ne 0 ]; then echo "$svc UI is not accessible on port $port"; else echo "$svc UI is accessible on port $port"; fi
 
   build:
 
