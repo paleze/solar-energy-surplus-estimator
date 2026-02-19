@@ -141,11 +141,7 @@ services:
       retries: 3
 
   app-serving:
-    build:
-      context: .
-      dockerfile: app-serving.Dockerfile
-      args:
-        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13.12-slim}
+    image: estimator-app-serving:latest
     depends_on:
       mlflow:
         condition: service_healthy

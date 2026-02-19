@@ -34,14 +34,28 @@ jobs:
         run: cp .env.demo .env
 
       - name: run airflow setup script
-        run: |
-          chmod +x ./setup-airflow.sh
-          ./setup-airflow.sh
+        run: ./setup-airflow.sh
 
-      - name: build docker-compose stack images
+      - name: set cache airflow docker image
+        id: cache-custom-airflow-image
+        uses: actions/cache@v4
+        with:
+          path: ci/cache/docker/custom-airflow-image
+          key: ${{runner.os}}-custom-airflow-image-${{hashfile('airflow.Dockerfile','airflow-requirements.txt')}}
+
+      - name: update custom airflow image if cache miss
         timeout-minutes: 5
-        run: docker compose build
+        if: steps.cache-custom-airflow-image.outputs.cache-hit != 'true'
+        run: |
+          ./airflow-build.sh
+          mkdir -p ci/cache/docker/custom-airflow-image
+          docker save estimator-custom-airflow:latest -o ./ci/cache/docker/custom-airflow-image/estimator-custom-airflow.tar
 
+      - name: load custom airflow image if cache hit
+        if: steps.cache-custom-airflow-image.outputs.cache-hit == 'true'
+        run: |
+          docker image load --input ./ci/cache/docker/custom-airflow-image/estimator-custom-airflow.tar
+        
       - name: create docker-compose stack
         timeout-minutes: 5
         run: docker compose up -d
