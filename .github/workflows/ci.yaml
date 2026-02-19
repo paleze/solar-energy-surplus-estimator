@@ -14,37 +14,9 @@ on:
 jobs:
 
 
-  test-ui:
-
-    runs-on: ubuntu-latest
-    #needs: build
-    strategy:
-      matrix:
-        include:
-          - port: 9000
-            service: minio
-          - port: 5000
-            service: mlflow
-          - port: 8080
-            service: airflow
-          - port: 8501
-            service: app-serving
-    steps:
-
-      - name: check service ${{matrix.service}}
-        # env:
-        #   TEST_SERVICES: ( "minio,9000" "mlflow,5000" "airflow,8080" "app-serving,8501" )
-        #run: TESTS=${{env.TEST_SERVICES}}; for service in "${TESTS[@]}"; do IFS=',' read -r svc port <<< "$service"; curl -s -o /dev/null http://localhost:$port; res=$? ; if [ $res -ne 0 ]; then echo "$svc UI is not accessible on port $port" && exit 1; else echo "$svc UI is accessible on port $port"; fi; done  
-        run: |
-          echo "Checking if ${{matrix.service}} is accessible on port ${{matrix.port}}"
-          curl -f http://localhost:${{ matrix.port }}
-          
-
   build:
 
     runs-on: ubuntu-latest
-    needs: test-ui
-    if: false
     steps:
 
       - name: checkout code
@@ -61,23 +33,6 @@ jobs:
         with:
           version: latest
 
-      # - name: Cache Docker layers
-      #   uses: actions/cache@v3
-      #   with:
-      #     path: /tmp/.buildx-cache
-      #     key: ${{ runner.os }}-buildx-${{hashFiles('airflow.Dockerfile','airflow-requirements.txt')}}
-      #     restore-keys: |
-      #       ${{ runner.os }}-buildx-
-
-      # - name: Cache airlfow Docker image
-      #   uses: actions/cache@v3
-      #   with:
-      #     path: /tmp/.buildx-cache-airflow
-      #     key: ${{ runner.os }}-airflow-${{hashFiles('airflow.Dockerfile','airflow-requirements.txt')}}
-      #     # restore-keys: |
-      #     #   ${{ runner.os }}-buildx-
-
-
       - name: Build and cache airflow custom docker image
         uses: docker/build-push-action@v6
         with:
@@ -92,7 +47,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-
       - name: Build and cache app-serving docker image
         uses: docker/build-push-action@v6
         with:
@@ -105,73 +59,6 @@ jobs:
           load: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      # - name: Build and cache Docker images
-      #   uses: docker/build-push-action@v3
-      #   with:
-      #     context: .
-      #     file: ./airflow.Dockerfile
-      #     push: false
-      #     tags: user/estimator-custom-airflow:latest
-      #     build-args: |
-      #       AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
-      #       AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
-      #     cache-from: type=local,src=/tmp/.buildx-cache
-      #     cache-to: type=local,dest=/tmp/.buildx-cache,new=true
-
-      # - name: Build and cache airflow Docker image
-      #   uses: docker/build-push-action@v6
-      #   with:
-      #     context: .
-      #     file: ./airflow.Dockerfile
-      #     push: false
-      #     tags: estimator-custom-airflow:latest
-      #     build-args: |
-      #       AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
-      #       AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
-      #     cache-from: type=local,src=/tmp/.buildx-cache-airflow
-      #     cache-to: type=local,dest=/tmp/.buildx-cache-airflow,new=true
-
-
-      # - name: Cache app-serving Docker image
-      #   uses: actions/cache@v3
-      #   with:
-      #     path: /tmp/.buildx-cache-app-serving
-      #     key: ${{ runner.os }}-app-serving-${{hashFiles('app-serving.Dockerfile','app-serving-requirements.txt')}}
-      #     # restore-keys: |
-      #     #   ${{ runner.os }}-buildx-
-
-      # - name: Build and cache app-serving Docker image
-      #   uses: docker/build-push-action@v6
-      #   with:
-      #     context: .
-      #     file: ./app-serving.Dockerfile
-      #     push: false
-      #     tags: estimator-app-serving:latest
-      #     build-args: |
-      #       PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
-      #     cache-from: type=local,src=/tmp/.buildx-cache-app-serving
-      #     cache-to: type=local,dest=/tmp/.buildx-cache-app-serving,new=true
-
-      # - name: set cache airflow docker image
-      #   id: cache-custom-airflow-image
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: ci/cache/docker/custom-airflow-image
-      #     key: ${{runner.os}}-custom-airflow-image-${{hashFiles('airflow.Dockerfile','airflow-requirements.txt')}}
-
-      # - name: update custom airflow image if cache miss
-      #   timeout-minutes: 5
-      #   if: steps.cache-custom-airflow-image.outputs.cache-hit != 'true'
-      #   run: |
-      #     ./airflow-build.sh
-      #     mkdir -p ci/cache/docker/custom-airflow-image
-      #     docker save estimator-custom-airflow:latest -o ./ci/cache/docker/custom-airflow-image/estimator-custom-airflow.tar
-
-      # - name: load custom airflow image if cache hit
-      #   if: steps.cache-custom-airflow-image.outputs.cache-hit == 'true'
-      #   run: |
-      #     docker image load --input ./ci/cache/docker/custom-airflow-image/estimator-custom-airflow.tar
 
       - name: set up Docker Compose
         uses: docker/setup-compose-action@v1
@@ -189,4 +76,25 @@ jobs:
         run: if [ docker compose ps | grep -i "(unhealthy)" ]; then echo "Some services are unhealthy" && exit 1; else echo "All services are healthy"; fi
 
   
+  test-ui:
+
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      matrix:
+        include:
+          - port: 9000
+            service: minio
+          - port: 5000
+            service: mlflow
+          - port: 8080
+            service: airflow
+          - port: 8501
+            service: app-serving
+    steps:
+
+      - name: Check endpoints
+        run: |
+          echo "Checking if ${{matrix.service}} is accessible on port ${{matrix.port}}"
+          curl -f http://localhost:${{ matrix.port }}
   
