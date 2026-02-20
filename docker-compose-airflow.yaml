@@ -50,7 +50,7 @@ x-airflow-common:
   # In order to add custom dependencies or upgrade provider distributions you can use your extended image.
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
-  image: estimator-custom-airflow:latest
+  image: ${IMAGE_REPO_PREFIX:-}estimator-custom-airflow:latest
   env_file:
     - ${ENV_FILE_PATH:-.env}
   environment:

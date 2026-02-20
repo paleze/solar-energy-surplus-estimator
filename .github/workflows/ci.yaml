@@ -17,7 +17,6 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-    #permissions: write-all
     permissions:
       contents: read
       packages: write
@@ -57,7 +56,6 @@ jobs:
           context: .
           file: ./airflow.Dockerfile
           tags: ghcr.io/${{ github.actor }}/${{ env.AIRFLOW_CUSTOM_IMAGE_NAME }}:latest
-          #tags: ${{ env.AIRFLOW_CUSTOM_IMAGE_NAME }}:latest
           build-args: |
             AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
             AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
@@ -65,9 +63,7 @@ jobs:
           load: true
           cache-from: type=gha,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
           cache-to: type=gha,mode=max,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
-          # tags: >
-          #   ${{ env.CUSTOM_IMAGE_NAME }}:${{ github.sha }},
-          #   ${{ env.CUSTOM_IMAGE_NAME }}:latest
+          
 
       # - name: list docker images
       #   run: docker images
@@ -77,16 +73,18 @@ jobs:
 
       - name: Build and cache app-serving docker image
         uses: docker/build-push-action@v6
+        env:
+          APP_SERVING_IMAGE_CACHE_KEY: estimator-app-serving-${{hashFiles('app-serving.py')}}-${{hashFiles('weather_data.py')}}
         with: 
           context: .
           file: ./app-serving.Dockerfile
-          tags: estimator-app-serving:latest
+          tags: ghcr.io/${{ github.actor }}/estimator-app-serving:latest
           build-args: |
             PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
-          push: false
+          push: true
           load: true
-          cache-from: type=gha,scope=estimator-app-serving-${{hashFiles('app-serving.py')}}-${{hashFiles('weather_data.py')}}
-          cache-to: type=gha,mode=max,scope=estimator-app-serving-${{hashFiles('app-serving.py')}}-${{hashFiles('weather_data.py')}}
+          cache-from: type=gha,scope=${{env.APP_SERVING_IMAGE_CACHE_KEY}}
+          cache-to: type=gha,mode=max,scope=${{env.APP_SERVING_IMAGE_CACHE_KEY}}
 
       - name: set up Docker Compose
         uses: docker/setup-compose-action@v1
@@ -97,6 +95,8 @@ jobs:
         run: docker compose version
 
       - name: create docker-compose stack
+        env:
+          IMAGE_REPO_PREFIX: ghcr.io/${{ github.actor }}/
         timeout-minutes: 5
         run: docker compose up -d
 
