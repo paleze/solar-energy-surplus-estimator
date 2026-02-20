@@ -17,11 +17,12 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-    permissions:
-      contents: read # needed to checkout code
-      artifact-metadata: write
-      attestations: write
-      packages: write # needed to push built images to GitHub Container Registry
+    permissions: write-all
+      # contents: read # needed to checkout code
+      # artifact-metadata: write
+      # attestations: write
+      # packages: write # needed to push built images to GitHub Container Registry
+      
 
     steps:
 
