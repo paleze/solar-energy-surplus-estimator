@@ -17,13 +17,15 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
+    permissions:
+      packages: write # needed to push built images to GitHub Container Registry
+
     steps:
 
       - name: check service
         continue-on-error: true
         run: |
-          if [ ! curl -f http://localhost:5000 ]
-          then
+          if [ ! curl -f 'http://localhost:5000' ]; then
             echo "Service is NOT accessible"
             exit 1
           else
