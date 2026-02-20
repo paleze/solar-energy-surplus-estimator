@@ -17,11 +17,11 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-    # permissions:
-    #   contents: read
-    #   packages: write
-    #   attestations: write
-    #   id-token: write
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
     
     #permissions: write-all
       # contents: read # needed to checkout code
@@ -74,17 +74,22 @@ jobs:
         uses: docker/build-push-action@v6
         env:
           AIRFLOW_IMAGE_CACHE_KEY: estimator-custom-airflow-${{hashFiles('airflow-requirements.txt')}}
+          CUSTOM_IMAGE_NAME: estimator-custom-airflow
         with:
           context: .
           file: ./airflow.Dockerfile
-          tags: estimator-custom-airflow:latest
+          #tags: ghcr.io/${{ github.actor }}/estimator-custom-airflow:latest
           build-args: |
             AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
             AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
-          push: false
+          push: true
           load: true
           cache-from: type=gha,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
           cache-to: type=gha,mode=max,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
+          tags: >
+            ${{github.actor}}/${{ env.CUSTOM_IMAGE_NAME }}:${{ github.sha }},
+            ${{github.actor}}/${{ env.CUSTOM_IMAGE_NAME }}:latest
+
 
       - name: Build and cache app-serving docker image
         uses: docker/build-push-action@v6
@@ -94,7 +99,7 @@ jobs:
           tags: estimator-app-serving:latest
           build-args: |
             PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
-          push: false
+          push: true
           load: true
           cache-from: type=gha,scope=estimator-app-serving-${{hashFiles('app-serving.py')}}-${{hashFiles('weather_data.py')}}
           cache-to: type=gha,mode=max,scope=estimator-app-serving-${{hashFiles('app-serving.py')}}-${{hashFiles('weather_data.py')}}
