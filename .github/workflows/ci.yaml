@@ -18,8 +18,7 @@ jobs:
 
     runs-on: ubuntu-latest
     permissions:
-      contents: read # needed to checkout code
-      contents: write
+      contents: write # needed to checkout code
       packages: write # needed to push built images to GitHub Container Registry
 
     steps:
