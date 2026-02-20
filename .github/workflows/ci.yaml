@@ -17,7 +17,7 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-    permissions: write-all
+    permissions: read-all|write-all
     # permissions:
     #   contents: read
     #   packages: write
@@ -52,12 +52,12 @@ jobs:
         uses: docker/build-push-action@v6
         env:
           AIRFLOW_IMAGE_CACHE_KEY: estimator-custom-airflow-${{hashFiles('airflow-requirements.txt')}}
-          CUSTOM_IMAGE_NAME: estimator-custom-airflow
+          AIRFLOW_CUSTOM_IMAGE_NAME: estimator-custom-airflow
         with:
           context: .
           file: ./airflow.Dockerfile
-          #tags: ghcr.io/${{ github.actor }}/estimator-custom-airflow:latest
-          tags: ${{ env.CUSTOM_IMAGE_NAME }}:latest
+          tags: ghcr.io/${{ github.actor }}/${{ env.AIRFLOW_CUSTOM_IMAGE_NAME }}:latest
+          #tags: ${{ env.AIRFLOW_CUSTOM_IMAGE_NAME }}:latest
           build-args: |
             AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
             AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
@@ -69,6 +69,11 @@ jobs:
           #   ${{ env.CUSTOM_IMAGE_NAME }}:${{ github.sha }},
           #   ${{ env.CUSTOM_IMAGE_NAME }}:latest
 
+      - name: list docker images
+        run: docker images
+
+      - name: push docker image to GitHub Container Registry
+        run: docker push ghcr.io/${{ github.actor }}/estimator-custom-airflow:latest
 
       - name: Build and cache app-serving docker image
         uses: docker/build-push-action@v6
