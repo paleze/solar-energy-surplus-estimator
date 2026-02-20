@@ -113,8 +113,8 @@ jobs:
         env:
           TEST_SERVICES: ( minio-api:9000 minio-console:9001 mlflow:5000 airflow:8080 app-serving:8501 )
         run: |
-          echo ${{env.TEST_SERVICES}}
-          for service in "${{env.TEST_SERVICES[@]}}"; do 
+          SVC_LIST=${{env.TEST_SERVICES}}
+          for service in "${SVC_LIST[@]}"; do 
             IFS=':' read -r svc port <<< "$service"
             if curl -s -o /dev/null http://localhost:${port}; then 
               echo "$svc UI is accessible on port $port"
