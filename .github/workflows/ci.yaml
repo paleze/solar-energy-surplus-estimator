@@ -26,15 +26,15 @@ jobs:
 
     steps:
 
-      - name: check service
-        continue-on-error: true
-        run: |
-          if curl -s -o /dev/null http://127.0.0.1:5000; then
-            echo "Service is accessible"
-          else
-            echo "Service is NOT accessible"
-            exit 1
-          fi
+      # - name: check service
+      #   continue-on-error: true
+      #   run: |
+      #     if curl -s -o /dev/null http://127.0.0.1:5000; then
+      #       echo "Service is accessible"
+      #     else
+      #       echo "Service is NOT accessible"
+      #       exit 1
+      #     fi
           
         #shell: bash
           # if [ ! curl -f http://localhost:5000 ]; then
