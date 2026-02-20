@@ -61,7 +61,7 @@ jobs:
           build-args: |
             AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
             AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
-          push: false
+          push: true
           load: true
           cache-from: type=gha,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
           cache-to: type=gha,mode=max,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
@@ -69,11 +69,11 @@ jobs:
           #   ${{ env.CUSTOM_IMAGE_NAME }}:${{ github.sha }},
           #   ${{ env.CUSTOM_IMAGE_NAME }}:latest
 
-      - name: list docker images
-        run: docker images
+      # - name: list docker images
+      #   run: docker images
 
-      - name: push docker image to GitHub Container Registry
-        run: docker push ghcr.io/${{ github.actor }}/estimator-custom-airflow:latest
+      # - name: push docker image to GitHub Container Registry
+      #   run: docker push ghcr.io/${{ github.actor }}/estimator-custom-airflow:latest
 
       - name: Build and cache app-serving docker image
         uses: docker/build-push-action@v6
