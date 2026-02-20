@@ -18,6 +18,7 @@ jobs:
 
     runs-on: ubuntu-latest
     permissions:
+      contents: read # needed to checkout code
       packages: write # needed to push built images to GitHub Container Registry
 
     steps:
@@ -25,12 +26,14 @@ jobs:
       - name: check service
         continue-on-error: true
         run: |
-          if [ ! curl -f 'http://localhost:5000' ]; then
+          if [ ! curl -f http://localhost:5000 ]; then
             echo "Service is NOT accessible"
             exit 1
           else
             echo "Service is accessible"
           fi
+        shell: bash
+
 
       - name: checkout code
         uses: actions/checkout@v4
