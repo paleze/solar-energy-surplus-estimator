@@ -20,6 +20,7 @@ jobs:
     permissions:
       contents: read # needed to checkout code
       artifact-metadata: write
+      attestations: write
       packages: write # needed to push built images to GitHub Container Registry
 
     steps:
@@ -27,12 +28,11 @@ jobs:
       - name: check service
         continue-on-error: true
         run: |
-          res=$(curl -s -o /dev/null http://localhost:5000)
-          if [ $res -ne 0 ]; then
+          if curl -s -o /dev/null http://127.0.0.1:5000; then
+            echo "Service is accessible"
+          else
             echo "Service is NOT accessible"
             exit 1
-          else
-            echo "Service is accessible"
           fi
           
         #shell: bash
@@ -107,6 +107,21 @@ jobs:
 
       - name: check running containers
         run: docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+      - name: check services endpoints
+        continue-on-error: true
+        env:
+          TEST_SERVICES: ( minio-api:9000 minio-console:9001 mlflow:5000 airflow:8080 app-serving:8501 )
+        run: |
+          echo ${{env.TEST_SERVICES}}
+          for service in "${{env.TEST_SERVICES[@]}}"; do 
+            IFS=':' read -r svc port <<< "$service"
+            if curl -s -o /dev/null http://localhost:${port}; then 
+              echo "$svc UI is accessible on port $port"
+            else 
+              echo "$svc UI is NOT accessible on port $port" && exit 1
+            fi 
+          done
 
       # - name: check service
       #   run: |
