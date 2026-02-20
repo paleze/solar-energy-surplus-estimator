@@ -17,40 +17,18 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-      attestations: write
-      id-token: write
+    permissions: write-all
+    # permissions:
+    #   contents: read
+    #   packages: write
+    #   attestations: write
+    #   id-token: write
     
-    #permissions: write-all
-      # contents: read # needed to checkout code
-      # artifact-metadata: write
-      # attestations: write
-      # packages: write # needed to push built images to GitHub Container Registry
-      
-
+    
     steps:
-
-      # - name: check service
-      #   continue-on-error: true
-      #   run: |
-      #     if curl -s -o /dev/null http://127.0.0.1:5000; then
-      #       echo "Service is accessible"
-      #     else
-      #       echo "Service is NOT accessible"
-      #       exit 1
-      #     fi
 
       - name: checkout code
         uses: actions/checkout@v4
-
-      # - name: Log into GitHub Container Registry
-      #   uses: docker/login-action@v3
-      #   with:
-      #     registry: ${{ env.REGISTRY}}
-      #     username: ${{ github.actor }}
-      #     password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -79,16 +57,17 @@ jobs:
           context: .
           file: ./airflow.Dockerfile
           #tags: ghcr.io/${{ github.actor }}/estimator-custom-airflow:latest
+          tags: ${{ env.CUSTOM_IMAGE_NAME }}:latest
           build-args: |
             AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
             AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
-          push: true
+          push: false
           load: true
           cache-from: type=gha,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
           cache-to: type=gha,mode=max,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
-          tags: >
-            ${{github.actor}}/${{ env.CUSTOM_IMAGE_NAME }}:${{ github.sha }},
-            ${{github.actor}}/${{ env.CUSTOM_IMAGE_NAME }}:latest
+          # tags: >
+          #   ${{ env.CUSTOM_IMAGE_NAME }}:${{ github.sha }},
+          #   ${{ env.CUSTOM_IMAGE_NAME }}:latest
 
 
       - name: Build and cache app-serving docker image
@@ -99,7 +78,7 @@ jobs:
           tags: estimator-app-serving:latest
           build-args: |
             PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
-          push: true
+          push: false
           load: true
           cache-from: type=gha,scope=estimator-app-serving-${{hashFiles('app-serving.py')}}-${{hashFiles('weather_data.py')}}
           cache-to: type=gha,mode=max,scope=estimator-app-serving-${{hashFiles('app-serving.py')}}-${{hashFiles('weather_data.py')}}
@@ -118,9 +97,10 @@ jobs:
 
       - name: check all services are healthy
         run: |
-          if [ docker compose ps | grep -i "(unhealthy)" ]
-          then echo "Some services are unhealthy" && exit 1
-          else echo "All services are healthy"
+          if  docker compose ps | grep -i "(unhealthy)"; then
+            echo "Some services are unhealthy" && exit 1
+          else 
+            echo "All services are healthy"
           fi
 
       - name: check running containers
