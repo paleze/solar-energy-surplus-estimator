@@ -19,6 +19,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
+      - name: check service
+        continue-on-error: true
+        run: |
+          if [ ! curl -f http://localhost:5000 ]
+          then
+            echo "Service is NOT accessible"
+            exit 1
+          else
+            echo "Service is accessible"
+          fi
+
       - name: checkout code
         uses: actions/checkout@v4
 
@@ -35,6 +46,8 @@ jobs:
 
       - name: Build and cache airflow custom docker image
         uses: docker/build-push-action@v6
+        env:
+          AIRFLOW_IMAGE_CACHE_KEY: estimator-custom-airflow-${{hashFiles('airflow-requirements.txt')}}
         with:
           context: .
           file: ./airflow.Dockerfile
@@ -42,10 +55,10 @@ jobs:
           build-args: |
             AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
             AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
-          push: false
+          push: true
           load: true
-          cache-from: type=gha,scope=estimator-custom-airflow-${{hashFiles('airflow-requirements.txt')}}
-          cache-to: type=gha,mode=max,scope=estimator-custom-airflow-${{hashFiles('airflow-requirements.txt')}}
+          cache-from: type=gha,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
+          cache-to: type=gha,mode=max,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
 
       - name: Build and cache app-serving docker image
         uses: docker/build-push-action@v6
@@ -55,7 +68,7 @@ jobs:
           tags: estimator-app-serving:latest
           build-args: |
             PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
-          push: false
+          push: true
           load: true
           cache-from: type=gha,scope=estimator-app-serving-${{hashFiles('app-serving.py')}}-${{hashFiles('weather_data.py')}}
           cache-to: type=gha,mode=max,scope=estimator-app-serving-${{hashFiles('app-serving.py')}}-${{hashFiles('weather_data.py')}}
@@ -73,14 +86,25 @@ jobs:
         run: docker compose up -d
 
       - name: check all services are healthy
-        run: if [ docker compose ps | grep -i "(unhealthy)" ]; then echo "Some services are unhealthy" && exit 1; else echo "All services are healthy"; fi
+        run: |
+          if [ docker compose ps | grep -i "(unhealthy)" ]
+          then echo "Some services are unhealthy" && exit 1
+          else echo "All services are healthy"
+          fi
 
       - name: check running containers
         run: docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"
 
-      - name: check service
-        run: curl -f http://localhost:5000
-  
+      # - name: check service
+      #   run: |
+      #     if [ ! curl -f http://localhost:5000 ]
+      #     then
+      #       echo "Service is NOT accessible"
+      #       exit 1
+      #     else
+      #       echo "Service is accessible"
+      #     fi
+
   # test-ui:
 
   #   runs-on: ubuntu-latest
@@ -88,6 +112,7 @@ jobs:
   #   continue-on-error: true
   #   strategy:
   #     matrix:
+  #       fail-fast: false # do not stop if a job in the matrix fails
   #       include:
   #         - port: 9001
   #           service: minio
