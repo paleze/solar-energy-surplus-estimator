@@ -23,7 +23,9 @@ jobs:
       attestations: write
       id-token: write
     
-    
+    env:
+      IMAGE_REPO_PREFIX: ghcr.io/${{ github.actor }}
+
     steps:
 
       - name: checkout code
@@ -55,7 +57,7 @@ jobs:
         with:
           context: .
           file: ./airflow.Dockerfile
-          tags: ghcr.io/${{ github.actor }}/${{ env.AIRFLOW_CUSTOM_IMAGE_NAME }}:latest
+          tags: ${{ env.IMAGE_REPO_PREFIX }}/${{ env.AIRFLOW_CUSTOM_IMAGE_NAME }}:latest
           build-args: |
             AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
             AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
@@ -65,12 +67,6 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
           
 
-      # - name: list docker images
-      #   run: docker images
-
-      # - name: push docker image to GitHub Container Registry
-      #   run: docker push ghcr.io/${{ github.actor }}/estimator-custom-airflow:latest
-
       - name: Build and cache app-serving docker image
         uses: docker/build-push-action@v6
         env:
@@ -78,7 +74,7 @@ jobs:
         with: 
           context: .
           file: ./app-serving.Dockerfile
-          tags: ghcr.io/${{ github.actor }}/estimator-app-serving:latest
+          tags: ${{ env.IMAGE_REPO_PREFIX }}/estimator-app-serving:latest
           build-args: |
             PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
           push: true
@@ -95,8 +91,6 @@ jobs:
         run: docker compose version
 
       - name: create docker-compose stack
-        env:
-          IMAGE_REPO_PREFIX: ghcr.io/${{ github.actor }}/
         timeout-minutes: 5
         run: docker compose up -d
 
@@ -126,30 +120,3 @@ jobs:
             fi 
           done
 
-  # test-ui:
-
-  #   runs-on: ubuntu-latest
-  #   needs: build
-  #   continue-on-error: true
-  #   strategy:
-  #     matrix:
-  #       fail-fast: false # do not stop if a job in the matrix fails
-  #       include:
-  #         - port: 9001
-  #           service: minio
-  #         - port: 5000
-  #           service: mlflow
-  #         - port: 8080
-  #           service: airflow
-  #         - port: 8501
-  #           service: app-serving
-  #   steps:
-
-  #     - name: Running containers
-  #       run: docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"
-        
-  #     - name: Check endpoints
-  #       run: |
-  #         echo "Checking if ${{matrix.service}} is accessible on port ${{matrix.port}}"
-  #         curl -f http://localhost:${{ matrix.port }}
-  
