@@ -62,7 +62,7 @@ jobs:
           build-args: |
             AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
             AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
-          push: ${{ (github.event_name != 'pull_request') && (github.event_name != 'workflow_dispatch') }}
+          push: true
           cache-from: type=gha,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
           cache-to: type=gha,mode=max,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
           
@@ -77,7 +77,7 @@ jobs:
           tags: ${{ env.IMAGE_REPO_PREFIX }}/estimator-app-serving:latest
           build-args: |
             PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
-          push: ${{ (github.event_name != 'pull_request') && (github.event_name != 'workflow_dispatch') }}
+          push: true
           cache-from: type=gha,scope=${{env.APP_SERVING_IMAGE_CACHE_KEY}}
           cache-to: type=gha,mode=max,scope=${{env.APP_SERVING_IMAGE_CACHE_KEY}}
 
