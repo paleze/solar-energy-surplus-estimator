@@ -24,7 +24,7 @@ jobs:
       id-token: write
     
     env:
-      IMAGE_REPO_PREFIX: ghcr.io/${{ github.actor }}
+      IMAGE_REPO_PREFIX: ghcr.io/${{ github.actor }}/
 
     steps:
 
@@ -58,7 +58,7 @@ jobs:
         with:
           context: .
           file: ./airflow.Dockerfile
-          tags: ${{ env.IMAGE_REPO_PREFIX }}/${{ env.AIRFLOW_CUSTOM_IMAGE_NAME }}:latest
+          tags: ${{ env.IMAGE_REPO_PREFIX }}${{ env.AIRFLOW_CUSTOM_IMAGE_NAME }}:latest
           build-args: |
             AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
             AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
@@ -74,7 +74,7 @@ jobs:
         with: 
           context: .
           file: ./app-serving.Dockerfile
-          tags: ${{ env.IMAGE_REPO_PREFIX }}/estimator-app-serving:latest
+          tags: ${{ env.IMAGE_REPO_PREFIX }}estimator-app-serving:latest
           build-args: |
             PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
           push: true
