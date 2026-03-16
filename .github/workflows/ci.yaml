@@ -28,29 +28,26 @@ jobs:
 
     steps:
 
-      - name: checkout code
-        uses: actions/checkout@v4
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{github.actor}}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: set env variables from .env.demo file
         run: cp .env.demo .env
 
       - name: run airflow setup script
         run: ./setup-airflow.sh
 
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{github.actor}}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
         with:
           version: latest
 
       - name: Build and cache airflow custom docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         env:
           AIRFLOW_IMAGE_CACHE_KEY: estimator-custom-airflow-${{hashFiles('airflow-requirements.txt')}}
           AIRFLOW_CUSTOM_IMAGE_NAME: estimator-custom-airflow
@@ -61,14 +58,13 @@ jobs:
           build-args: |
             AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
             AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
-          push: true
-          load: true
+          push: ${{ (github.event_name != 'pull_request') && (github.event_name != 'workflow_dispatch') }}
           cache-from: type=gha,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
           cache-to: type=gha,mode=max,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
           
 
       - name: Build and cache app-serving docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         env:
           APP_SERVING_IMAGE_CACHE_KEY: estimator-app-serving-${{hashFiles('app-serving.py')}}-${{hashFiles('weather_data.py')}}
         with: 
@@ -77,8 +73,7 @@ jobs:
           tags: ${{ env.IMAGE_REPO_PREFIX }}/estimator-app-serving:latest
           build-args: |
             PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
-          push: true
-          load: true
+          push: ${{ (github.event_name != 'pull_request') && (github.event_name != 'workflow_dispatch') }}
           cache-from: type=gha,scope=${{env.APP_SERVING_IMAGE_CACHE_KEY}}
           cache-to: type=gha,mode=max,scope=${{env.APP_SERVING_IMAGE_CACHE_KEY}}
 
