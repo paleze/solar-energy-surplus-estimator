@@ -9,7 +9,8 @@ on:
       paths-ignore: # ignore pull requests on documentation files
         - README.md
 
-
+env:
+  IMAGE_TAG_PREFIX: ghcr.io/${{ github.actor }}/
 
 jobs:
 
@@ -23,12 +24,8 @@ jobs:
       attestations: write
       id-token: write
     
-    env:
-      IMAGE_REPO_PREFIX: ghcr.io/${{ github.actor }}/
-
     steps:
 
-         
       - name: checkout code
         uses: actions/checkout@v4      
 
@@ -54,11 +51,10 @@ jobs:
         uses: docker/build-push-action@v7
         env:
           AIRFLOW_IMAGE_CACHE_KEY: estimator-custom-airflow-${{hashFiles('airflow-requirements.txt')}}
-          AIRFLOW_CUSTOM_IMAGE_NAME: estimator-custom-airflow
         with:
           context: .
           file: ./airflow.Dockerfile
-          tags: ${{ env.IMAGE_REPO_PREFIX }}${{ env.AIRFLOW_CUSTOM_IMAGE_NAME }}:latest
+          tags: ${{ env.IMAGE_TAG_PREFIX }}estimator-custom-airflow:latest
           build-args: |
             AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
             AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
@@ -74,12 +70,21 @@ jobs:
         with: 
           context: .
           file: ./app-serving.Dockerfile
-          tags: ${{ env.IMAGE_REPO_PREFIX }}estimator-app-serving:latest
+          tags: ${{ env.IMAGE_TAG_PREFIX }}estimator-app-serving:latest
           build-args: |
             PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
           push: true
           cache-from: type=gha,scope=${{env.APP_SERVING_IMAGE_CACHE_KEY}}
           cache-to: type=gha,mode=max,scope=${{env.APP_SERVING_IMAGE_CACHE_KEY}}
+
+      
+
+  test:
+
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
 
       - name: set up Docker Compose
         uses: docker/setup-compose-action@v1
@@ -118,4 +123,3 @@ jobs:
               echo "$svc UI is NOT accessible on port $port" && exit 1
             fi 
           done
-

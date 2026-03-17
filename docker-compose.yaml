@@ -141,7 +141,7 @@ services:
       retries: 3
 
   app-serving:
-    image: ${IMAGE_REPO_PREFIX:-}estimator-app-serving:latest
+    image: ${IMAGE_TAG_PREFIX:-}estimator-app-serving:latest
     depends_on:
       mlflow:
         condition: service_healthy
