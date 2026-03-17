@@ -14,7 +14,7 @@ if [ -z ${airflow_proj_dir} ]; then
 fi
 
 # create Airflow folders
-airflow_dirs="dags,logs,plugins,config"
+airflow_dirs="dags,logs,plugins,config,data"
 for dir in $(echo ${airflow_dirs} | tr "," "\n"); do
     if [ ! -d ${airflow_proj_dir}/$dir ]; then
         echo "Creating missing Airflow folder: ${airflow_proj_dir}/$dir"

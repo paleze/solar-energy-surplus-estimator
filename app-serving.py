@@ -1,3 +1,5 @@
+
+
 import streamlit as st
 
 
@@ -218,8 +220,13 @@ def main():
             col1.metric("Predicted solar energy surplus generated until sunset (KWh): ", f"{solar_surplus_prediction}", format="%.2f")
             col2.metric("Predicted battery capacity usage at sunset (including stored solar surplus) (%): ", f"{battery_predicted_usage}")
             col3.metric("Predicted solar energy surplus exported to the grid (KWh):", f"{solar_surplus_to_grid}",format="%.2f")
-            
-                    
+
+            # Append prediction results to csv file for later drift analysis
+            prediction_results_filename = 'data/prediction_data.csv'
+            df_eval["solar_surplus"] = solar_surplus_prediction
+            df_eval.to_csv(prediction_results_filename, sep='\t', encoding='utf-8', index=False, header=(not os.path.exists(prediction_results_filename)), mode='a')
+
+
     except Exception as e:
         st.error(f"⚠️ Exception: {e}")
     

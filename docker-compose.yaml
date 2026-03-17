@@ -163,6 +163,8 @@ services:
       - streamlit run app-serving.py
     ports:
       - "${APP_SERVING_HOST_PORT:-8501}:${APP_SERVING_PORT:-8501}"
+    volumes:
+      - "${AIRFLOW_PROJ_DIR:-.}/data:/home/streamlit/data"
     healthcheck:
       test:
          [
