@@ -1,0 +1,1 @@
+docker build -f airflow.Dockerfile -t estimator-custom-airflow:latest --build-arg AIRFLOW_VERSION=${AIRFLOW_VERSION:-3.1.6} --build-arg AIRFLOW_IMAGE_NAME=${AIRFLOW_IMAGE_NAME:-apache/airflow} .

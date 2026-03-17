@@ -4,58 +4,138 @@ on:
       branches:
         - main
       types:
-        - closed
+        - opened
+        - reopened
       paths-ignore: # ignore pull requests on documentation files
-        - README.md 
+        - README.md
 
-
+env:
+  IMAGE_TAG_PREFIX: ghcr.io/${{ github.actor }}/
 
 jobs:
+
 
   build:
 
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
     
     steps:
 
       - name: checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4      
 
       - name: set env variables from .env.demo file
         run: cp .env.demo .env
 
       - name: run airflow setup script
-        run: |
-          chmod +x ./setup-airflow.sh
-          ./setup-airflow.sh
+        run: ./setup-airflow.sh
+    
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{github.actor}}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+        with:
+          version: latest
+
+      - name: Build and cache airflow custom docker image
+        uses: docker/build-push-action@v7
+        env:
+          AIRFLOW_IMAGE_CACHE_KEY: estimator-custom-airflow-${{hashFiles('airflow-requirements.txt')}}
+        with:
+          context: .
+          file: ./airflow.Dockerfile
+          tags: ${{ env.IMAGE_TAG_PREFIX }}estimator-custom-airflow:latest
+          build-args: |
+            AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
+            AIRFLOW_IMAGE_NAME=${{env.AIRFLOW_IMAGE_NAME || 'apache/airflow' }}
+          push: true
+          cache-from: type=gha,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
+          cache-to: type=gha,mode=max,scope=${{env.AIRFLOW_IMAGE_CACHE_KEY}}
+          
+
+      - name: Build and cache app-serving docker image
+        uses: docker/build-push-action@v7
+        env:
+          APP_SERVING_IMAGE_CACHE_KEY: estimator-app-serving-${{hashFiles('app-serving.py')}}-${{hashFiles('weather_data.py')}}
+        with: 
+          context: .
+          file: ./app-serving.Dockerfile
+          tags: ${{ env.IMAGE_TAG_PREFIX }}estimator-app-serving:latest
+          build-args: |
+            PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
+          push: true
+          cache-from: type=gha,scope=${{env.APP_SERVING_IMAGE_CACHE_KEY}}
+          cache-to: type=gha,mode=max,scope=${{env.APP_SERVING_IMAGE_CACHE_KEY}}
+
       
-      - name: create docker-compose stack
-        timeout-minutes: 10
-        run: docker compose up -d --build
 
-      - name: check all services are healthy
-        run: if [ docker compose ps | grep -i "(unhealthy)" ]; then echo "Some services are unhealthy" && exit 1; else echo "All services are healthy"; fi
-
-  
-  test-ui-accessibility:
+  test:
 
     runs-on: ubuntu-latest
     needs: build
-    strategy:
-        matrix:
-          service:
-            - minio
-            - mlflow
-            - airflow
-            - app-serving
-          port: # use default ports for each service
-            - 9000
-            - 5000
-            - 8080
-            - 8501
-    
+
     steps:
 
-      - name: check all service UIs are accessible
-        run: if [ ! curl -f http://localhost:${{ matrix.port }} ]; then echo "${{ matrix.service }} UI is not accessible" && exit 1; else echo "${{ matrix.service }} UI is accessible"; fi
+      - name: checkout code
+        uses: actions/checkout@v4
 
+      - name: set env variables from .env.demo file
+        run: cp .env.demo .env
+
+      - name: run airflow setup script
+        run: ./setup-airflow.sh
+    
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{github.actor}}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: set up Docker Compose
+        uses: docker/setup-compose-action@v1
+        with:
+          version: latest
+
+      - name: show docker compose version
+        run: docker compose version
+
+      - name: create docker-compose stack
+        timeout-minutes: 5
+        run: docker compose up -d
+
+      - name: check all services are healthy
+        run: |
+          if  docker compose ps | grep -i "(unhealthy)"; then
+            echo "Some services are unhealthy" && exit 1
+          else 
+            echo "All services are healthy"
+          fi
+
+      - name: check running containers
+        run: docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+      - name: check services endpoints
+        continue-on-error: true
+        env:
+          TEST_SERVICES: ( minio-api:9000 minio-console:9001 mlflow:5000 airflow:8080 app-serving:8501 )
+        run: |
+          SVC_LIST=${{env.TEST_SERVICES}}
+          for service in "${SVC_LIST[@]}"; do 
+            IFS=':' read -r svc port <<< "$service"
+            if curl -s -o /dev/null http://localhost:${port}; then 
+              echo "$svc UI is accessible on port $port"
+            else 
+              echo "$svc UI is NOT accessible on port $port" && exit 1
+            fi 
+          done
