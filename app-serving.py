@@ -17,7 +17,27 @@ from mlflow import mlflow, MlflowClient
 
 import weather_data as wd
 
+from evidently import Report, Dataset, DataDefinition
+from evidently.presets import DataDriftPreset
 
+
+
+# Set evaluation features 
+categorical_features=['time', 'month','weather_code', 'cloud_cover']
+numerical_features=[ 'temperature' ]
+target_feature = 'solar_surplus'
+
+# Set drift analysis features
+drift_categorical_features = ['weather_code', 'cloud_cover']
+drift_numerical_features = numerical_features  + [ target_feature ]
+
+
+prediction_results_filename = 'data/prediction_data.csv'
+training_data_filename = 'data/training_data.csv'
+drift_eval_html_file = "data/drift_report.html"
+
+DEFAULT_DRIF_THRESHOLD = 1.0 # default threshold for data drift detection, to be used in evidently report (e.g. for Kolmogorov-Smirnov test)
+PREDICTION_DATA_SIZE_DRIFT_ANALYSIS_THRESHOLD = 50 # minimum number of prediction data points required to perform drift analysis
 
 def init_mlflow():
 
@@ -92,13 +112,9 @@ def predict(df_eval) -> float:
         # Get production model artifacts
         model, dv = get_model_artifacts()
 
-        # Set evaluation features 
-        categorical=['time', 'month','weather_code', 'cloud_cover']
-        numerical=[ 'temperature' ]
-
         # Apply DictionaryVectorizer
-        df_eval[categorical] = df_eval[categorical].astype(str)
-        X_eval_dicts = df_eval[categorical+numerical].to_dict(orient='records')
+        df_eval[categorical_features] = df_eval[categorical_features].astype(str)
+        X_eval_dicts = df_eval[categorical_features + numerical_features].to_dict(orient='records')
         X_eval = dv.transform(X_eval_dicts)
 
         # Model preriction
@@ -167,6 +183,57 @@ def get_evaluation_data(evaluation_date, evaluation_time):
     return df_eval
 
 
+def perform_drift_analysis(minimum_data_size: int, drift_threshold:float):
+    
+    """
+    Perform drift analysis comparing the distribution of the latest predictions with the distribution of previous predictions, and display results in Streamlit
+    
+    :param prediction_results_filename: path to csv file where the latest prediction results have been stored, and with the history of previous predictions
+    """
+
+    try:
+        
+        # Load prediction results data
+        current_df = pd.read_csv(prediction_results_filename, sep='\t', encoding='utf-8')
+
+        if current_df.size < minimum_data_size:
+            st.warning("⚠️ Not enough reference data for drift analysis")
+            return
+
+        # Load reference data
+        reference_df = pd.read_csv(training_data_filename, sep='\t', encoding='utf-8')
+
+        # Create evidently Dataset oobjects
+        data_definition = DataDefinition(
+            numerical_columns=drift_numerical_features,
+            categorical_columns=drift_categorical_features
+        )
+
+        current_data = Dataset.from_pandas(
+            current_df,
+            data_definition=data_definition
+        )
+
+        reference_data = Dataset.from_pandas(
+            reference_df,
+            data_definition=data_definition
+        )
+
+        # Create and run evidently report for data drift analysis
+        report = Report(metrics=[DataDriftPreset(threshold=drift_threshold)])
+
+        # # Generate Column-Specific Reports
+        drift_eval = report.run(reference_data=reference_data, current_data=current_data)
+
+        return drift_eval
+    
+
+
+    except Exception as e:
+        st.error(f"⚠️ Failed to perform drift analysis: {e}")
+
+
+
 def main():
 
     try:
@@ -222,11 +289,28 @@ def main():
             col3.metric("Predicted solar energy surplus exported to the grid (KWh):", f"{solar_surplus_to_grid}",format="%.2f")
 
             # Append prediction results to csv file for later drift analysis
-            prediction_results_filename = 'data/prediction_data.csv'
-            df_eval["solar_surplus"] = solar_surplus_prediction
+            df_eval[target_feature] = solar_surplus_prediction
             df_eval.to_csv(prediction_results_filename, sep='\t', encoding='utf-8', index=False, header=(not os.path.exists(prediction_results_filename)), mode='a')
 
+        # Data drift section
+        st.subheader("Data Drift Analysis")
+        prediction_data_size_threshold = st.number_input("Prediction data size threshold for computing data drift:", min_value=0, value=PREDICTION_DATA_SIZE_DRIFT_ANALYSIS_THRESHOLD)
+        drift_threshold = st.number_input("Drift Score threshold:", min_value=0.0, value=DEFAULT_DRIF_THRESHOLD,max_value=10.0, step=0.5)
 
+        # Perform drift analysis and display results
+        if st.button("Perform Data Drift analysis", type="primary"): 
+            drift_eval = perform_drift_analysis(minimum_data_size=prediction_data_size_threshold, drift_threshold=drift_threshold)
+
+            # save report in html format and read it to be displayed in Streamlit
+            drift_eval.save_html(drift_eval_html_file)
+            with open(drift_eval_html_file, 'r') as f:
+                html_drift_report = f.read()
+
+            with st.expander("Data Drift Analysis", expanded=True):
+                st.write("The following report compares the distribution of the latest predictions with the distribution of reference model training data to detect potential data drift:")
+                st.components.v1.html(html_drift_report, height=800, scrolling=True)
+
+            
     except Exception as e:
         st.error(f"⚠️ Exception: {e}")
     
