@@ -14,9 +14,12 @@ requests-cache==1.2.1
 mlflow==3.8.1
 xgboost==3.1.3
 
-
 # Web UI
-streamlit==1.54.0
+streamlit==1.49.0
+
+# Monitoring
+streamlit_extras==0.7.8
+prometheus-client==0.21.1
 
 # Data Drift Analysis Libraries
 evidently==0.7.21

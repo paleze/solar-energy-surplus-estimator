@@ -1,26 +1,32 @@
+from datetime import date, datetime, timedelta
+import os
+import time
+import logging
+import pickle
+import json
 
 
+# UI
 import streamlit as st
 
 
+# Data processing and model prediction
 import numpy as np
 import pandas as pd
 import xgboost as xgb
 
 
-from datetime import date, datetime, timedelta
-import os
-import logging
-import pickle
-
 from mlflow import mlflow, MlflowClient
 
 import weather_data as wd
 
+# Drift analysis
 from evidently import Report, Dataset, DataDefinition
 from evidently.presets import DataDriftPreset
 
-
+# Metrics
+from streamlit_extras.prometheus import streamlit_registry
+from metrics import prediction_counter, prediction_latency, drift_score_gauge, drift_feature_counter, feature_mean_gauge, feature_std_gauge
 
 # Set evaluation features 
 categorical_features=['time', 'month','weather_code', 'cloud_cover']
@@ -34,10 +40,13 @@ drift_numerical_features = numerical_features  + [ target_feature ]
 
 prediction_results_filename = 'data/prediction_data.csv'
 training_data_filename = 'data/training_data.csv'
-drift_eval_html_file = "data/drift_report.html"
 
 DEFAULT_DRIF_THRESHOLD = 1.0 # default threshold for data drift detection, to be used in evidently report (e.g. for Kolmogorov-Smirnov test)
 PREDICTION_DATA_SIZE_DRIFT_ANALYSIS_THRESHOLD = 50 # minimum number of prediction data points required to perform drift analysis
+
+
+
+
 
 def init_mlflow():
 
@@ -63,7 +72,6 @@ def init_mlflow():
     # Get MlFlow Client
     global client
     client = MlflowClient(mlflow_tracking_uri)
-
 
 
 @st.cache_resource
@@ -108,9 +116,12 @@ def predict(df_eval) -> float:
     """
 
     try:
-         
+        
         # Get production model artifacts
         model, dv = get_model_artifacts()
+
+        # Get prediction start time for latency monitoring
+        start_time = time.time()
 
         # Apply DictionaryVectorizer
         df_eval[categorical_features] = df_eval[categorical_features].astype(str)
@@ -125,6 +136,17 @@ def predict(df_eval) -> float:
         z = np.zeros(len(y_pred))
         y_pred_bottomed = np.maximum(y_pred,z)
         solar_surplus_prediction = sum(y_pred_bottomed)
+
+        # Record metrics
+        curr_time=df_eval["time"].iloc[0]
+        curr_month=df_eval["month"].iloc[0]
+        prediction_latency.labels(time=curr_time, month=curr_month).observe(time.time() - start_time)
+        prediction_counter.labels(time=curr_time, month=curr_month).inc()
+        
+        
+        # Append prediction results to csv file for later drift analysis
+        df_eval[target_feature] = solar_surplus_prediction
+        df_eval.to_csv(prediction_results_filename, sep='\t', encoding='utf-8', index=False, header=(not os.path.exists(prediction_results_filename)), mode='a')        
 
         logging.info(f"Solar surplus predictions: {y_pred}")
         logging.info(f"Solar surplus predictions (zero-bottmoed): {y_pred_bottomed}")
@@ -194,9 +216,9 @@ def perform_drift_analysis(minimum_data_size: int, drift_threshold:float):
     try:
         
         # Load prediction results data
-        current_df = pd.read_csv(prediction_results_filename, sep='\t', encoding='utf-8')
+        prediction_df = pd.read_csv(prediction_results_filename, sep='\t', encoding='utf-8')
 
-        if current_df.size < minimum_data_size:
+        if prediction_df.size < minimum_data_size:
             st.warning("⚠️ Not enough reference data for drift analysis")
             return
 
@@ -209,6 +231,7 @@ def perform_drift_analysis(minimum_data_size: int, drift_threshold:float):
             categorical_columns=drift_categorical_features
         )
 
+        current_df=prediction_df[-minimum_data_size:]
         current_data = Dataset.from_pandas(
             current_df,
             data_definition=data_definition
@@ -222,13 +245,32 @@ def perform_drift_analysis(minimum_data_size: int, drift_threshold:float):
         # Create and run evidently report for data drift analysis
         report = Report(metrics=[DataDriftPreset(threshold=drift_threshold)])
 
-        # # Generate Column-Specific Reports
-        drift_eval = report.run(reference_data=reference_data, current_data=current_data)
+        # Generate Column-Specific Reports
+        drift_report = report.run(reference_data=reference_data, current_data=current_data)
+        drift_json = json.loads(drift_report.json())
 
-        return drift_eval
+        # Update drift metrics
+        for metric in drift_json["metrics"]:
+            if not metric["metric_name"].startswith("ValueDrift"):
+                continue
+            config = metric["config"]
+            threshold=config["threshold"]
+            value=metric["value"]
+            if value > threshold:
+                drift_score_gauge.labels(feature=config["column"], method=config["method"], threshold=threshold).set(metric["value"])    
+                drift_feature_counter.labels(feature=config["column"], method=config["method"], threshold=threshold).inc()
+        
+        # Update feature distribution metrics
+        feature_columns= drift_numerical_features + drift_categorical_features
+        feature_mean = current_df[feature_columns].mean()
+        feature_std = current_df[feature_columns].std()
+        
+        for column in feature_columns:
+            feature_mean_gauge.labels(feature=column).set(feature_mean[column])
+            feature_std_gauge.labels(feature=column).set(feature_std[column])
+
+        return drift_report
     
-
-
     except Exception as e:
         st.error(f"⚠️ Failed to perform drift analysis: {e}")
 
@@ -281,16 +323,12 @@ def main():
             battery_predicted_usage = round(min(100, battery_usage_percentage + (solar_surplus_prediction/battery_full_capacity*100) ))
 
             # Display results
-            st.success("✅ Prediction ready")
+            st.success(f"✅ Prediction ready")
             st.subheader("Prediction Results")
             col1, col2, col3 = st.columns(3)
-            col1.metric("Predicted solar energy surplus generated until sunset (KWh): ", f"{solar_surplus_prediction}", format="%.2f")
+            col1.metric("Predicted solar energy surplus generated until sunset (KWh): ", f"{solar_surplus_prediction:.2f}")
             col2.metric("Predicted battery capacity usage at sunset (including stored solar surplus) (%): ", f"{battery_predicted_usage}")
-            col3.metric("Predicted solar energy surplus exported to the grid (KWh):", f"{solar_surplus_to_grid}",format="%.2f")
-
-            # Append prediction results to csv file for later drift analysis
-            df_eval[target_feature] = solar_surplus_prediction
-            df_eval.to_csv(prediction_results_filename, sep='\t', encoding='utf-8', index=False, header=(not os.path.exists(prediction_results_filename)), mode='a')
+            col3.metric("Predicted solar energy surplus exported to the grid (KWh):", f"{solar_surplus_to_grid:.2f}")
 
         # Data drift section
         st.subheader("Data Drift Analysis")
@@ -301,14 +339,9 @@ def main():
         if st.button("Perform Data Drift analysis", type="primary"): 
             drift_eval = perform_drift_analysis(minimum_data_size=prediction_data_size_threshold, drift_threshold=drift_threshold)
 
-            # save report in html format and read it to be displayed in Streamlit
-            drift_eval.save_html(drift_eval_html_file)
-            with open(drift_eval_html_file, 'r') as f:
-                html_drift_report = f.read()
-
             with st.expander("Data Drift Analysis", expanded=True):
                 st.write("The following report compares the distribution of the latest predictions with the distribution of reference model training data to detect potential data drift:")
-                st.components.v1.html(html_drift_report, height=800, scrolling=True)
+                st.components.v1.html(drift_eval.get_html_str(as_iframe=False), height=800, scrolling=True)
 
             
     except Exception as e:

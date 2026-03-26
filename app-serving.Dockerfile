@@ -12,7 +12,7 @@ USER streamlit
 WORKDIR /home/streamlit
 
 # copy application files
-COPY app-serving-requirements.txt app-serving.py weather_data.py .
+COPY app-serving-requirements.txt app-serving.py metrics.py weather_data.py .
 
 # This URLLIB3 setting is necessary not to let urllib3.future required by open-meteo shadow the actual urllib3 package ( https://github.com/jawah/urllib3.future )
 USER root
