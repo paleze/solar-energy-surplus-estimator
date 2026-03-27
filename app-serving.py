@@ -25,8 +25,10 @@ from evidently import Report, Dataset, DataDefinition
 from evidently.presets import DataDriftPreset
 
 # Metrics
+import metrics
 from streamlit_extras.prometheus import streamlit_registry
-from metrics import prediction_counter, prediction_latency, drift_score_gauge, drift_feature_counter, feature_mean_gauge, feature_std_gauge
+
+
 
 # Set evaluation features 
 categorical_features=['time', 'month','weather_code', 'cloud_cover']
@@ -35,7 +37,7 @@ target_feature = 'solar_surplus'
 
 # Set drift analysis features
 drift_categorical_features = ['weather_code', 'cloud_cover']
-drift_numerical_features = numerical_features  + [ target_feature ]
+drift_numerical_features = numerical_features
 
 
 prediction_results_filename = 'data/prediction_data.csv'
@@ -140,8 +142,8 @@ def predict(df_eval) -> float:
         # Record metrics
         curr_time=df_eval["time"].iloc[0]
         curr_month=df_eval["month"].iloc[0]
-        prediction_latency.labels(time=curr_time, month=curr_month).observe(time.time() - start_time)
-        prediction_counter.labels(time=curr_time, month=curr_month).inc()
+        metrics.prediction_latency.labels(time=curr_time, month=curr_month).observe(time.time() - start_time)
+        metrics.prediction_counter.labels(time=curr_time, month=curr_month).inc()
         
         
         # Append prediction results to csv file for later drift analysis
@@ -253,12 +255,15 @@ def perform_drift_analysis(minimum_data_size: int, drift_threshold:float):
         for metric in drift_json["metrics"]:
             if not metric["metric_name"].startswith("ValueDrift"):
                 continue
+
             config = metric["config"]
             threshold=config["threshold"]
+            
             value=metric["value"]
             if value > threshold:
-                drift_score_gauge.labels(feature=config["column"], method=config["method"], threshold=threshold).set(metric["value"])    
-                drift_feature_counter.labels(feature=config["column"], method=config["method"], threshold=threshold).inc()
+                metrics.drift_score_gauge.labels(feature=config["column"], method=config["method"], threshold=threshold).set(metric["value"])    
+                metrics.drift_feature_counter.labels(feature=config["column"], method=config["method"], threshold=threshold).inc()
+                metrics.drift_threshold_gauge.labels(feature=config["column"], method=config["method"]).set(threshold)
         
         # Update feature distribution metrics
         feature_columns= drift_numerical_features + drift_categorical_features
@@ -266,8 +271,8 @@ def perform_drift_analysis(minimum_data_size: int, drift_threshold:float):
         feature_std = current_df[feature_columns].std()
         
         for column in feature_columns:
-            feature_mean_gauge.labels(feature=column).set(feature_mean[column])
-            feature_std_gauge.labels(feature=column).set(feature_std[column])
+            metrics.feature_mean_gauge.labels(feature=column).set(feature_mean[column])
+            metrics.feature_std_gauge.labels(feature=column).set(feature_std[column])
 
         return drift_report
     
@@ -333,7 +338,7 @@ def main():
         # Data drift section
         st.subheader("Data Drift Analysis")
         prediction_data_size_threshold = st.number_input("Prediction data size threshold for computing data drift:", min_value=0, value=PREDICTION_DATA_SIZE_DRIFT_ANALYSIS_THRESHOLD)
-        drift_threshold = st.number_input("Drift Score threshold:", min_value=0.0, value=DEFAULT_DRIF_THRESHOLD,max_value=10.0, step=0.5)
+        drift_threshold = st.number_input("Drift Score threshold:", min_value=0.0, value=DEFAULT_DRIF_THRESHOLD,max_value=10.0, step=0.25)
 
         # Perform drift analysis and display results
         if st.button("Perform Data Drift analysis", type="primary"): 

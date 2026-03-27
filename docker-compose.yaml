@@ -1,6 +1,7 @@
 
 include:
   - docker-compose-airflow.yaml
+  - docker-compose-monitoring.yaml
 
 secrets:
   minio_root_user:

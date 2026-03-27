@@ -18,6 +18,13 @@ prediction_latency = Histogram(
     registry=registry
 )
 
+drift_threshold_gauge = Gauge(
+    name='drift_threshold',
+    documentation='Data drift score threshold',
+    labelnames=('feature', 'method',),
+    registry=registry
+)
+
 drift_score_gauge = Gauge(
     name='drift_score',
     documentation='Data drift score by feature',
