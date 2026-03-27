@@ -1,4 +1,10 @@
+# *** Airflow setup ***
+
+echo "Setup Airflow ..."
+
 # Performs the manual setup steps for Airflow project described at https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html
+
+
 
 # Add user id to .env file
 if [ ! -f .env -o -z $(grep AIRFLOW_UID .env) ]; then
@@ -26,4 +32,22 @@ done
 echo "Copying solar estimator DAG to Airflow dags folder..."
 cp solar-estimator-model-dag.py weather_data.py ${airflow_proj_dir}/dags
 
-echo "Airflow setup completed."
+
+# change grafana folder permissions to let grafana create folders with its grafana user
+echo "Setup monitoring ..."
+mkdir -p grafana/data
+chmod -R o+w grafana
+
+
+# Build the Airflow Docker image
+echo "Building Airflow Docker image..."
+./airflow-build.sh
+
+
+# *** App-serving setup ***
+
+# Build the app-serving Docker image
+echo "Building app-serving image..."
+./app-serving-build.sh
+
+echo "Setup completed."
