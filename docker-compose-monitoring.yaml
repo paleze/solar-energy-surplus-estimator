@@ -24,6 +24,11 @@ services:
       - '--web.console.libraries=/etc/prometheus/console_libraries'
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--web.enable-lifecycle'
+    healthcheck:
+      test: [ "CMD-SHELL", "nc -v localhost 9090" ]
+      interval: 15s
+      timeout: 10s
+      retries: 3
 
 
   # Grafana for metrics visualization
@@ -42,6 +47,12 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/data:/var/lib/grafana
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:$${GRAFANA_PORT:-3000}" ]
+      interval: 15s
+      timeout: 10s
+      retries: 3
 
 
