@@ -28,7 +28,7 @@ services:
       test: [ "CMD-SHELL", "nc -v localhost 9090" ]
       interval: 15s
       timeout: 10s
-      retries: 3
+      retries: 5
 
 
   # Grafana for metrics visualization
