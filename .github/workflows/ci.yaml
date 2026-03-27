@@ -128,7 +128,7 @@ jobs:
       - name: check services endpoints
         continue-on-error: true
         env:
-          TEST_SERVICES: ( minio-api:9000 minio-console:9001 mlflow:5000 airflow:8080 app-serving:8501 )
+          TEST_SERVICES: ( minio-api:9000 minio-console:9001 mlflow:5000 airflow:8080 app-serving:8501 prometheus:9099 grafana:3000 )
         run: |
           SVC_LIST=${{env.TEST_SERVICES}}
           for service in "${SVC_LIST[@]}"; do 
