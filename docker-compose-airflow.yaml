@@ -128,7 +128,7 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_airflow_password
       POSTGRES_DB: ${POSTGRES_AIRFLOW_DB:-airflow}
     volumes:
-      - postgres-db-volume:/var/lib/postgresql/data
+      - ${POSTGRES_DATA_PATH:-./postgres/airflow-data}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 10s
@@ -366,5 +366,3 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
-volumes:
-  postgres-db-volume:
