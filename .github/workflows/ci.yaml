@@ -112,7 +112,7 @@ jobs:
 
       - name: create docker-compose stack
         timeout-minutes: 5
-        run: docker compose up -d
+        run: docker compose --profile flower up -d
 
       - name: check all services are healthy
         run: |
@@ -128,7 +128,7 @@ jobs:
       - name: check services endpoints
         continue-on-error: true
         env:
-          TEST_SERVICES: ( minio-api:9000 minio-console:9001 mlflow:5000 airflow:8080 app-serving:8501 prometheus:9099 grafana:3000 )
+          TEST_SERVICES: ( minio-api:9000 minio-console:9001 mlflow:5000 airflow:8080 app-serving:8501 prometheus:9099 grafana:3000 flower:5555 )
         run: |
           SVC_LIST=${{env.TEST_SERVICES}}
           for service in "${SVC_LIST[@]}"; do 
