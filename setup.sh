@@ -1,7 +1,5 @@
 # *** Airflow setup ***
 
-echo "Setup Airflow ..."
-
 # Performs the manual setup steps for Airflow project described at https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html
 
 
@@ -20,7 +18,7 @@ if [ -z ${airflow_proj_dir} ]; then
 fi
 
 # create Airflow folders
-airflow_dirs="dags,logs,plugins,config,data"
+airflow_dirs="dags,logs,plugins,config"
 for dir in $(echo ${airflow_dirs} | tr "," "\n"); do
     if [ ! -d ${airflow_proj_dir}/$dir ]; then
         echo "Creating missing Airflow folder: ${airflow_proj_dir}/$dir"
@@ -28,15 +26,15 @@ for dir in $(echo ${airflow_dirs} | tr "," "\n"); do
     fi
 done
 
+# create monitoring folders and change permissions
+mkdir -p prometheus/data
+chmod -R o+w prometheus
+mkdir -p grafana/data
+chmod -R o+w grafana
+
 # Copy the solar estimator DAG to the Airflow dags folder
 echo "Copying solar estimator DAG to Airflow dags folder..."
 cp solar-estimator-model-dag.py weather_data.py ${airflow_proj_dir}/dags
-
-
-# change grafana folder permissions to let grafana create folders with its grafana user
-echo "Setup monitoring ..."
-mkdir -p grafana/data
-chmod -R o+w grafana
 
 
 # Build the Airflow Docker image
