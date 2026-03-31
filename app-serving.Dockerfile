@@ -1,6 +1,16 @@
 ARG PYTHON_IMAGE=${PYTHON_IMAGE:?}
 
-FROM ${PYTHON_IMAGE}
+# Builder image
+FROM ${PYTHON_IMAGE} AS builder
+
+
+# Install dependencies in the virtual environment
+COPY app-serving-requirements.txt .
+# This URLLIB3 setting is necessary not to let urllib3.future required by open-meteo shadow the actual urllib3 package ( https://github.com/jawah/urllib3.future )
+RUN pip install uv && \
+    (URLLIB3_NO_OVERRIDE=1 uv pip install --system --no-cache niquests --no-binary urllib3-future -r ./app-serving-requirements.txt) && \
+    # Remove pip, setuptools, and wheel from the venv
+    pip uninstall -y uv pip setuptools wheel
 
 
 # Create a custom user
@@ -12,12 +22,6 @@ USER streamlit
 WORKDIR /home/streamlit
 
 # copy application files
-COPY app-serving-requirements.txt app-serving.py weather_data.py .
-
-# This URLLIB3 setting is necessary not to let urllib3.future required by open-meteo shadow the actual urllib3 package ( https://github.com/jawah/urllib3.future )
-USER root
-RUN pip install uv && (URLLIB3_NO_OVERRIDE=1 uv pip install --system --no-cache niquests --no-binary urllib3-future -r ./app-serving-requirements.txt)
-
-USER streamlit
+COPY app-serving.py weather_data.py .
 
 EXPOSE 8501

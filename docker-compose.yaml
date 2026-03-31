@@ -72,7 +72,7 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_mlflow_password
       POSTGRES_DB: ${POSTGRES_DB:-mlflow}
     volumes:
-      - ${POSTGRES_DATA_PATH:-./postgres/data}:/var/lib/postgresql/data
+      - ${POSTGRES_DATA_PATH:-./postgres/mlflow-data}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $(cat $${POSTGRES_USER_FILE})"]
       interval: 5s
