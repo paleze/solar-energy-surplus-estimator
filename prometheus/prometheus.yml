@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 15s
+
+
+# Scrape configurations
+scrape_configs:
+
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Model service metrics
+  - job_name: 'solar-estimator-app'
+    static_configs:
+      - targets: ['app-serving:8501']
+    metrics_path: '/_stcore/metrics'
+    scrape_interval: 10s
+
+  # Flower metrics
+  - job_name: flower
+    static_configs:
+      - targets: ['flower:5555']
+    scrape_interval: 10s

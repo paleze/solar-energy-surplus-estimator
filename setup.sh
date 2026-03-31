@@ -1,4 +1,8 @@
+# *** Airflow setup ***
+
 # Performs the manual setup steps for Airflow project described at https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html
+
+
 
 # Add user id to .env file
 if [ ! -f .env -o -z $(grep AIRFLOW_UID .env) ]; then
@@ -22,8 +26,26 @@ for dir in $(echo ${airflow_dirs} | tr "," "\n"); do
     fi
 done
 
+# create monitoring folders and change permissions
+mkdir -p prometheus/data
+chmod -R o+w prometheus
+mkdir -p grafana/data
+chmod -R o+w grafana
+
 # Copy the solar estimator DAG to the Airflow dags folder
 echo "Copying solar estimator DAG to Airflow dags folder..."
 cp solar-estimator-model-dag.py weather_data.py ${airflow_proj_dir}/dags
 
-echo "Airflow setup completed."
+
+# Build the Airflow Docker image
+echo "Building Airflow Docker image..."
+./airflow-build.sh
+
+
+# *** App-serving setup ***
+
+# Build the app-serving Docker image
+echo "Building app-serving image..."
+./app-serving-build.sh
+
+echo "Setup completed."

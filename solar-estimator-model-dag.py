@@ -439,6 +439,10 @@ def train_model(ti):
     res = register_best_model(client, dv)
     logging.info(f"Model training completed - best_run_id: {res["best_run_id"]}, best rmse: {res["best_run_rmse"]}, best model id: {res["best_model_id"]}, best version: {res["best_version"]}")
 
+    # Save data file
+    source_data_filename='data/training_data.csv'
+    logging.info(f"Saving training data set as {source_data_filename}")
+    df_merge.to_csv(source_data_filename, sep='\t', encoding='utf-8', index=False, header=True)
 
 
 with DAG(
