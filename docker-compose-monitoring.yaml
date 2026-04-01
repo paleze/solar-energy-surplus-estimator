@@ -14,7 +14,7 @@ services:
     container_name: prometheus
     user: "${AIRFLOW_UID:-50000}:0"
     ports:
-      - "${PROMETHEUS_PORT:-9099}:9090"
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./prometheus/data:/prometheus
@@ -36,7 +36,7 @@ services:
     image: grafana/grafana:12.4.2
     container_name: grafana
     ports:
-      - "${GRAFANA_PORT:-3000}:3000"
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
     secrets:
       - grafana_admin_password
     environment:
