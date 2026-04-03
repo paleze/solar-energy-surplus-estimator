@@ -18,75 +18,18 @@ import xgboost as xgb
 from hyperopt import fmin, tpe, hp, STATUS_OK, Trials # use hyperpot package to perform parameter tuning
 from hyperopt.pyll import scope
 
-from minio import Minio
 
 from mlflow import mlflow, MlflowClient
 
 import weather_data as wd
+
+import utils
 
 
 default_args = {
     'owner': 'airflow',
     'start_date': None,
 }   
-
-
-def get_secret_from_env_or_file(env_var, file_path_var=None):
-    """
-    Retrieve a secret value from an environment variable or a file.
-
-    Args:
-    - env_var (str): The name of the environment variable.
-    - file_path_var (str): The name of the environment variable that contains the file path.
-
-    Returns:
-    - str: The secret value.
-    """
-    secret = os.getenv(env_var)
-    if secret is not None:
-        return secret
-
-    if file_path_var is not None:
-        file_path = os.getenv(file_path_var)
-        if file_path is not None:
-            try:
-                with open(file_path, 'r') as file:
-                    return file.read().strip()
-            except Exception as e:
-                raise RuntimeError(f"Failed to read secret from file {file_path}: {e}") from e
-    
-    raise RuntimeError(f"Secret not found: neither {env_var} nor {file_path_var} is set.")
-
-
-def get_s3_client():
-    
-    """
-    Return a Minio client instance
-    """
-    
-    try:
-
-        access_key=get_secret_from_env_or_file("MINIO_ACCESS_KEY","/run/secrets/minio_root_user")
-        secret_key=get_secret_from_env_or_file("MINIO_SECRET_KEY","/run/secrets/minio_root_password")
-        minio_port=get_secret_from_env_or_file("MINIO_API_PORT")
-        minio_region=get_secret_from_env_or_file("MINIO_REGION")
-        minio_host=get_secret_from_env_or_file("MINIO_HOST")
-
-        # Create client with access key and secret key with specific region.
-        s3_client = Minio(
-            "{host}:{port}".format(host=minio_host,port=minio_port),
-            access_key=access_key,
-            secret_key=secret_key,
-            region=minio_region,
-            secure=False
-        )
-
-    except Exception as e:
-        raise RuntimeError("Failed to create Minio client: {error}".format(error=str(e))) from e
-    
-    logging.info("S3 client created successfully")
-    
-    return s3_client
 
 
 
@@ -109,9 +52,9 @@ def fecth_data(ti, pattern="*.csv", concat=True, add_filename_col=True, sort=Tru
 
     try:
 
-        s3_client = get_s3_client()
+        s3_client = utils.get_s3_client()
 
-        source_data_bucket=get_secret_from_env_or_file("MINIO_DATA_BUCKET")
+        source_data_bucket=utils.get_secret_from_env_or_file("MINIO_SOURCE_DATA_BUCKET")
         
         objects = s3_client.list_objects(bucket_name=source_data_bucket)
         
@@ -206,9 +149,9 @@ def get_weather_data(ti):
     start_date, end_date, _ = ti.xcom_pull(task_ids='transform_data')
 
     # Get environment variables for location (default is old town Bergamo)
-    latitude=float(get_secret_from_env_or_file("SITE_LATITUDE"))
-    longitude=float(get_secret_from_env_or_file("SITE_LONGITUDE"))
-    timezone=get_secret_from_env_or_file("SITE_TIMEZONE")
+    latitude=float(utils.get_secret_from_env_or_file("SITE_LATITUDE"))
+    longitude=float(utils.get_secret_from_env_or_file("SITE_LONGITUDE"))
+    timezone=utils.get_secret_from_env_or_file("SITE_TIMEZONE")
 
     logging.info(f"Parameters for historical weather forecast:")
     logging.info(f"- Date range: {start_date} - {end_date}")
@@ -339,6 +282,7 @@ def register_best_model(client, dv):
     }
         
 
+    
 
 def train_model(ti):
 
@@ -378,7 +322,7 @@ def train_model(ti):
 
     # Set experiment tracking
     experiment_name="solar-surplus-estimator-experiment"
-    mlflow_tracking_uri=get_secret_from_env_or_file("MLFLOW_TRACKING_URI")
+    mlflow_tracking_uri=utils.get_secret_from_env_or_file("MLFLOW_TRACKING_URI")
     mlflow.set_tracking_uri(mlflow_tracking_uri)
     mlflow.set_experiment(experiment_name)
     
@@ -439,10 +383,31 @@ def train_model(ti):
     res = register_best_model(client, dv)
     logging.info(f"Model training completed - best_run_id: {res["best_run_id"]}, best rmse: {res["best_run_rmse"]}, best model id: {res["best_model_id"]}, best version: {res["best_version"]}")
 
-    # Save data file
-    source_data_filename='data/training_data.csv'
-    logging.info(f"Saving training data set as {source_data_filename}")
-    df_merge.to_csv(source_data_filename, sep='\t', encoding='utf-8', index=False, header=True)
+    return df_merge
+
+
+
+def upload_training_set(ti):
+
+    """
+    Save training data set as a csv file and upload it to the bucket
+    """
+
+    df_merge = ti.xcom_pull(task_ids='train_model')
+
+    # Save training data in local csv file
+    training_data_filename=utils.get_secret_from_env_or_file("MINIO_TRAINING_DATA_FILE_NAME")
+    training_data_path = f"/tmp/{training_data_filename}"
+
+    logging.info(f"Saving training data set as {training_data_path}")
+    df_merge.to_csv(training_data_path, sep='\t', encoding='utf-8', index=False, header=True)
+    
+
+    # Upload training data set to bucket
+    analytics_data_bucket=utils.get_secret_from_env_or_file("MINIO_ANALYTICS_DATA_BUCKET")
+    
+    utils.upload_to_bucket(training_data_path, analytics_data_bucket)
+       
 
 
 with DAG(
@@ -485,4 +450,9 @@ with DAG(
         python_callable=train_model,
     )
 
-fetch_data_task >> transform_data_task >> get_weather_data_task >> merge_historical_weather_task >> train_model_task
+    upload_training_set_task = PythonOperator(
+        task_id='upload_training_set',
+        python_callable=upload_training_set,
+    )
+
+fetch_data_task >> transform_data_task >> get_weather_data_task >> merge_historical_weather_task >> train_model_task >> upload_training_set_task
