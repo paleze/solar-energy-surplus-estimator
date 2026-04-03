@@ -5,11 +5,11 @@ import logging
 import pickle
 import json
 import requests
+import jwt
 
 
 # Local files
 import weather_data as wd
-
 
 # UI
 import streamlit as st
@@ -45,6 +45,10 @@ drift_numerical_features = numerical_features
 prediction_results_filename = 'data/prediction_data.csv'
 training_data_filename = 'data/training_data.csv'
 airflow_url = "http://airflow-apiserver:8080"
+
+# Airflow global data
+airflow_access_token=None
+model_training_pipeline_dag_id="solar_energy_surplus_estimator_model_pipeline"
 
 DEFAULT_DRIF_THRESHOLD = 1.0 # default threshold for data drift detection, to be used in evidently report (e.g. for Kolmogorov-Smirnov test)
 PREDICTION_DATA_SIZE_DRIFT_ANALYSIS_THRESHOLD = 50 # minimum number of prediction data points required to perform drift analysis
@@ -89,7 +93,9 @@ def get_model_artifacts():
         mlflow_version = client.get_model_version_by_alias(model_name, model_production_alias)
 
         if mlflow_version is None:
-             raise RuntimeError(f"No version found for model '{model_name}' with alias '{model_production_alias}', run the model pipeline to create one")
+             # No production model version found, trigger the model training pipeline
+             dag_run_id = trigger_airflow_dag(dag_id=model_training_pipeline_dag_id)
+             raise RuntimeError(f"No version found for model '{model_name}' with alias '{model_production_alias}', triggered model training pipeline with dag run id: {dag_run_id}")
 
         # Load model
         booster = mlflow.xgboost.load_model(f"models:/{model_name}@{model_production_alias}")
@@ -302,11 +308,38 @@ def get_docker_secret(secret_name):
         raise RuntimeError(f"Docker secret file {file_path} not found for secret {secret_name}")
 
 
+def is_jwt_token_valid(jwt_token):
+    """
+    Check if the given token is still valid by decoding it and checking the expiration time
+
+    Args:
+        token: JWT token to be checked
+    """
+    try:
+        
+        decoded_token = jwt.decode(jwt_token, options={"verify_signature": False})
+        exp_timestamp = decoded_token.get('exp')
+        if exp_timestamp is None:
+            raise RuntimeError("Token does not have an expiration time")
+        
+        current_timestamp = int(time.time())
+        return current_timestamp < exp_timestamp
+    
+    except Exception as e:
+        print(f"Error checking token validity: {e}")
+        return False
+
+
 def get_airflow_access_token():
     """
     Get Airflow access token for authentication using Airflow credentials stored in docker secrets
     """
-    
+
+    # check if airflow access token is still valid
+    global airflow_access_token
+    if airflow_access_token is not None and is_jwt_token_valid(airflow_access_token):
+        return airflow_access_token
+
     endpoint = f"{airflow_url}/auth/token"
 
     # Get Airflow credentials from docker secrets
@@ -328,7 +361,8 @@ def get_airflow_access_token():
         response.raise_for_status()
         
         token_data = response.json()
-        return token_data['access_token']
+        airflow_access_token = token_data['access_token']
+        return airflow_access_token
         
     except requests.exceptions.HTTPError as e:
         print(f"HTTP error getting Airflow token: {e.response.status_code}")
@@ -339,6 +373,46 @@ def get_airflow_access_token():
         raise e
 
 
+def is_dag_running(dag_id):
+    """
+    Check if the dag_id has any active run in Airflow
+
+    Args:
+        dag_id: The DAG identifier
+    """
+
+    # Get access token
+    access_token = get_airflow_access_token()
+
+    endpoint = f"{airflow_url}/api/v2/dags/{dag_id}/dagRuns?order_by=-start_date"
+
+    try:
+        response = requests.get(
+            endpoint,
+            headers={
+                "Authorization": f"Bearer {access_token}"
+            },
+            timeout=10
+        )
+        response.raise_for_status()
+        
+        dag_runs = response.json()
+        is_dag_running = False
+        if 'dag_runs' in dag_runs and len(dag_runs['dag_runs']) > 0:
+            latest_run = dag_runs['dag_runs'][0]
+            is_dag_running = latest_run['state'] in ['running', 'queued']
+
+        return is_dag_running
+        
+    except requests.exceptions.HTTPError as e:
+        print(f"HTTP error triggering DAG: {e.response.status_code}")
+        print(f"Response: {e.response.text}")
+        raise e
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        raise e
+
+
 def trigger_airflow_dag(dag_id, conf=None, logical_date=None):
     """
     Trigger an Airflow DAG via REST API
@@ -346,14 +420,19 @@ def trigger_airflow_dag(dag_id, conf=None, logical_date=None):
     Args:
         dag_id: The DAG identifier
         conf: Dictionary of configuration parameters
-        logical_date: ISO 8601 formatted execution date
+        logical_date: ISO 8601 formatted execution date`
     
     Returns:
         DAG run ID if successful, None otherwise
     """
-    
-    endpoint = f"{airflow_url}/api/v2/dags/{dag_id}/dagRuns"
+
+    if is_dag_running(dag_id):
+        raise RuntimeError(f"DAG '{dag_id}' is already running! Please wait for the current run to finish before triggering a new one.")
+
     access_token = get_airflow_access_token()
+    endpoint = f"{airflow_url}/api/v2/dags/{dag_id}/dagRuns"
+
+    
     payload = {
         "logical_date": logical_date if logical_date else datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         "note": "Triggered from model serving app after data drift detection"
@@ -458,12 +537,13 @@ def main():
 
             if drift_detected:
                 try:
-                    dag_run_id = trigger_airflow_dag(dag_id="solar_energy_surplus_estimator_model_pipeline")
-                    st.warning(f"⚠️ Data drift detected! Triggered model retraining with dag run id: {dag_run_id}")
+                    st.warning(f"⚠️ Data drift detected! A model retraining needs to be triggered")
+                    dag_run_id = trigger_airflow_dag(dag_id=model_training_pipeline_dag_id)
+                    st.warning(f"✅ Triggered model retraining with dag run id: {dag_run_id}")
                 except Exception as e:
                     st.error(f"⚠️ Exception: {e}")
             else:
-                st.success("✅ No data drift detected. Adjust the Drift Score threshold value according to the detected drift scores to trigger model retraining when needed.")
+                st.success("✅ No data drift detected. Set a lower Drift Score threshold according to the detected Drift Scores to force drift detection and trigger model retraining")
 
     except Exception as e:
         st.error(f"⚠️ Exception: {e}")
