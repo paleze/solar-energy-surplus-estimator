@@ -4,9 +4,11 @@ ARG AIRFLOW_IMAGE_NAME="${AIRFLOW_IMAGE_NAME:?}"
 FROM ${AIRFLOW_IMAGE_NAME}
 
 
-COPY airflow-requirements.txt .
+COPY airflow-requirements.txt ./
 
 # This URLLIB3 setting is necessary not to let urllib3.future required by open-meteo shadow the actual urllib3 package ( https://github.com/jawah/urllib3.future )
 RUN URLLIB3_NO_OVERRIDE=1 uv pip install --no-cache niquests --no-binary urllib3-future  "apache-airflow==${AIRFLOW_VERSION}" -r ./airflow-requirements.txt
 
+RUN mkdir -p /opt/airflow/dags 
+COPY solar-estimator-model-dag.py weather_data.py utils.py /opt/airflow/dags/
 

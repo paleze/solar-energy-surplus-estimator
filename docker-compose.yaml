@@ -55,7 +55,7 @@ services:
     environment:
       MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
       MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
-      MINIO_BUCKET_NAMES: "${MINIO_DATA_BUCKET:-source-data},${MINIO_MLFLOW_BUCKET:-mlflow}"
+      MINIO_BUCKET_NAMES: "${MINIO_SOURCE_DATA_BUCKET:-source-data},${MINIO_ANALYTICS_DATA_BUCKET:-analytics-data},${MINIO_MLFLOW_BUCKET:-mlflow}"
       MINIO_HOST: ${MINIO_HOST:-minio}
     entrypoint: > 
       /bin/sh -c "
@@ -152,10 +152,20 @@ services:
     secrets:
       - airflow_user
       - airflow_password
+      - minio_root_user
+      - minio_root_password
     environment:
       
       # Mlflow
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+
+      # Minio
+      MINIO_HOST: ${MINIO_HOST:-minio}
+      MINIO_API_PORT: "9000"
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      MINIO_ANALYTICS_DATA_BUCKET: ${MINIO_ANALYTICS_DATA_BUCKET:-analytics-data}
+      MINIO_TRAINING_DATA_FILE_NAME: ${MINIO_TRAINING_DATA_FILE_NAME:-training_data.csv}
+      MINIO_PREDICTION_RESULTS_FILE_NAME: ${MINIO_PREDICTION_RESULTS_FILE_NAME:-prediction_data.csv}
 
       # Evaluation context data
       SITE_LATITUDE: ${SITE_LATITUDE:-45.704178167781265}
@@ -169,8 +179,6 @@ services:
       - streamlit run app-serving.py
     ports:
       - "127.0.0.1:${APP_SERVING_HOST_PORT:-8501}:${APP_SERVING_PORT:-8501}"
-    volumes:
-      - "${AIRFLOW_PROJ_DIR:-.}/data:/home/streamlit/data"
     healthcheck:
       test:
          [

@@ -22,6 +22,7 @@ import xgboost as xgb
 # Mlflow
 from mlflow import mlflow, MlflowClient
 
+
 # Drift analysis
 from evidently import Report, Dataset, DataDefinition
 from evidently.presets import DataDriftPreset
@@ -30,6 +31,7 @@ from evidently.presets import DataDriftPreset
 import metrics
 from streamlit_extras.prometheus import streamlit_registry
 
+import utils
 
 
 # Set evaluation features 
@@ -42,8 +44,12 @@ drift_categorical_features = ['weather_code', 'cloud_cover']
 drift_numerical_features = numerical_features
 
 
-prediction_results_filename = 'data/prediction_data.csv'
-training_data_filename = 'data/training_data.csv'
+analytics_data_bucket=utils.get_secret_from_env_or_file("MINIO_ANALYTICS_DATA_BUCKET")
+prediction_results_filename = utils.get_secret_from_env_or_file("MINIO_PREDICTION_RESULTS_FILE_NAME")
+prediction_results_path=f"/tmp/{prediction_results_filename}"
+
+training_data_filename = utils.get_secret_from_env_or_file("MINIO_TRAINING_DATA_FILE_NAME")
+training_data_path=f"/tmp/{training_data_filename}"
 airflow_url = "http://airflow-apiserver:8080"
 
 # Airflow global data
@@ -114,6 +120,31 @@ def get_model_artifacts():
 
 
 
+def save_prediction_results(df):
+    """
+    Save prediction results to a csv file for later drift analysis
+    
+    :param df: DataFrame containing the prediction results to be saved
+    """
+
+    try:
+
+        if not os.path.exists(prediction_results_path):
+            try:
+                utils.get_file_from_bucket(analytics_data_bucket, prediction_results_path)
+            except Exception as e:
+                logging.error(f"Failed to download prediction results file: {e}, creating a new one")
+
+        # Update local prediction results file with new predictions
+        df.to_csv(prediction_results_path, sep='\t', encoding='utf-8', index=False, header=(not os.path.exists(prediction_results_path)), mode='a')        
+
+        # Upload updated prediction results file to S3 bucket    
+        utils.upload_to_bucket(prediction_results_path, analytics_data_bucket)
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to save prediction results: {e}") from e
+    
+
 def predict(df_eval) -> float:
 
     """
@@ -152,14 +183,14 @@ def predict(df_eval) -> float:
         metrics.prediction_latency.labels(time=curr_time, month=curr_month).observe(time.time() - start_time)
         metrics.prediction_counter.labels(time=curr_time, month=curr_month).inc()
         
-        
-        # Append prediction results to csv file for later drift analysis
-        df_eval[target_feature] = solar_surplus_prediction
-        df_eval.to_csv(prediction_results_filename, sep='\t', encoding='utf-8', index=False, header=(not os.path.exists(prediction_results_filename)), mode='a')        
-
         logging.info(f"Solar surplus predictions: {y_pred}")
         logging.info(f"Solar surplus predictions (zero-bottmoed): {y_pred_bottomed}")
         logging.info(f"Total solar surplus prediction for the rest of day: {solar_surplus_prediction}")
+
+        # Append prediction results to csv file for later drift analysis
+        # df_eval[target_feature] = solar_surplus_prediction
+        # df_eval.to_csv(prediction_results_filename, sep='\t', encoding='utf-8', index=False, header=(not os.path.exists(prediction_results_filename)), mode='a')        
+        save_prediction_results(df_eval)
         
         return solar_surplus_prediction
     
@@ -224,15 +255,23 @@ def perform_drift_analysis(minimum_data_size: int, drift_threshold:float):
 
     try:
         
+        # download prediction results file from S3 bucket if it does not exist locally
+        if not os.path.exists(prediction_results_path):
+            utils.get_file_from_bucket(analytics_data_bucket, prediction_results_path)
+
         # Load prediction results data
-        prediction_df = pd.read_csv(prediction_results_filename, sep='\t', encoding='utf-8')
+        prediction_df = pd.read_csv(prediction_results_path, sep='\t', encoding='utf-8')
 
         if prediction_df.size < minimum_data_size:
             st.warning("⚠️ Not enough reference data for drift analysis")
             return
 
-        # Load reference data
-        reference_df = pd.read_csv(training_data_filename, sep='\t', encoding='utf-8')
+        # download training data file from S3 bucket if it does not exist locally
+        if not os.path.exists(training_data_path):
+            utils.get_file_from_bucket(analytics_data_bucket, training_data_path)
+
+        # Load training data set to be used as reference data for drift analysis
+        reference_df = pd.read_csv(training_data_path, sep='\t', encoding='utf-8')
 
         # Create evidently Dataset oobjects
         data_definition = DataDefinition(

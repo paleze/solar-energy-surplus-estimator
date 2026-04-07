@@ -17,14 +17,15 @@ if [ -z ${airflow_proj_dir} ]; then
     airflow_proj_dir="."
 fi
 
+# TODO: review, may not necessary
 # create Airflow folders
-airflow_dirs="dags,logs,plugins,config"
-for dir in $(echo ${airflow_dirs} | tr "," "\n"); do
-    if [ ! -d ${airflow_proj_dir}/$dir ]; then
-        echo "Creating missing Airflow folder: ${airflow_proj_dir}/$dir"
-        mkdir -p ${airflow_proj_dir}/$dir
-    fi
-done
+# airflow_dirs="dags,logs,plugins,config"
+# for dir in $(echo ${airflow_dirs} | tr "," "\n"); do
+#     if [ ! -d ${airflow_proj_dir}/$dir ]; then
+#         echo "Creating missing Airflow folder: ${airflow_proj_dir}/$dir"
+#         mkdir -p ${airflow_proj_dir}/$dir
+#     fi
+# done
 
 # create monitoring folders and change permissions
 mkdir -p prometheus/data
@@ -32,9 +33,9 @@ chmod -R o+w prometheus
 mkdir -p grafana/data
 chmod -R o+w grafana
 
-# Copy the solar estimator DAG to the Airflow dags folder
-echo "Copying solar estimator DAG to Airflow dags folder..."
-cp solar-estimator-model-dag.py weather_data.py ${airflow_proj_dir}/dags
+# # Copy the solar estimator DAG to the Airflow dags folder
+# echo "Copying solar estimator DAG to Airflow dags folder..."
+# cp solar-estimator-model-dag.py weather_data.py ${airflow_proj_dir}/dags
 
 
 # Build the Airflow Docker image

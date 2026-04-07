@@ -50,7 +50,7 @@ def main():
     minio_port = os.getenv("MINIO_HOST_API_PORT", "9000")
     minio_access_key = os.getenv("MINIO_ACCESS_KEY", "minio")
     minio_secret_key = os.getenv("MINIO_SECRET_KEY", "minio123")
-    minio_source_bucket= os.getenv("MINIO_DATA_BUCKET", "source-data")
+    minio_source_bucket= os.getenv("MINIO_SOURCE_DATA_BUCKET", "source-data")
 
     # Initialize Minio client
     client = Minio(

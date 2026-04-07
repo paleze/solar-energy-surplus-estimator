@@ -22,3 +22,6 @@ prometheus-client==0.21.1
 
 # Data Drift Analysis Libraries
 evidently==0.7.21
+
+# Storage
+minio==7.2.20
