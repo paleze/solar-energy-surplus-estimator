@@ -8,12 +8,11 @@ Follow these steps to setup the environment:
 
 - rename the `.env.demo` file into `.env` and change environment variables if needed or default values will be applied.
 
-- optionally configure env variable `AIRFLOW_PROJ_DIR`. It defaults to the current folder if not set
+- optionally configure env variable `AIRFLOW_PROJ_DIR`. It defaults to the local `airflow` folder if not set
 
 - run `setup.sh` to perform these actions:
     - set env var `AIRFLOW_UID` to the current user id and append it to a local `.env` file
-    - create airflow folders according to `AIRFLOW_PROJ_DIR`
-    - setup monitoring folders
+    - create folders
     - build custom images
 
 - run `docker compose up -d` to start stack containers (you can have a nice view of running containers by executing `watch 'docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"` in another terminal)
