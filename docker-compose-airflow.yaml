@@ -92,7 +92,6 @@ x-airflow-common:
     SITE_TIMEZONE: ${SITE_TIMEZONE:-Europe/Berlin}
 
   volumes:
-    #- ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
@@ -129,7 +128,7 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_airflow_password
       POSTGRES_DB: ${POSTGRES_AIRFLOW_DB:-airflow}
     volumes:
-      - ${POSTGRES_DATA_PATH:-./postgres/airflow-data}:/var/lib/postgresql/data
+      - ${POSTGRES_AIRFLOW_DATA_PATH:-./postgres/airflow-data}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 10s

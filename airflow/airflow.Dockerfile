@@ -10,5 +10,5 @@ COPY airflow-requirements.txt ./
 RUN URLLIB3_NO_OVERRIDE=1 uv pip install --no-cache niquests --no-binary urllib3-future  "apache-airflow==${AIRFLOW_VERSION}" -r ./airflow-requirements.txt
 
 RUN mkdir -p /opt/airflow/dags 
-COPY solar-estimator-model-dag.py weather_data.py utils.py /opt/airflow/dags/
+COPY solar-estimator-model-dag.py ../common/weather_data.py ../common/utils.py /opt/airflow/dags/
 

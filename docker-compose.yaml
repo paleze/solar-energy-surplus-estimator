@@ -55,8 +55,11 @@ services:
     environment:
       MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
       MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
+      MINIO_SOURCE_DATA_BUCKET: ${MINIO_SOURCE_DATA_BUCKET:-source-data}
       MINIO_BUCKET_NAMES: "${MINIO_SOURCE_DATA_BUCKET:-source-data},${MINIO_ANALYTICS_DATA_BUCKET:-analytics-data},${MINIO_MLFLOW_BUCKET:-mlflow}"
       MINIO_HOST: ${MINIO_HOST:-minio}
+    volumes:
+      - ./minio/source-data:/source-data
     entrypoint: > 
       /bin/sh -c "
         mc alias set minio http://$${MINIO_HOST}:9000 $(cat /run/secrets/minio_root_user) $(cat /run/secrets/minio_root_password);
@@ -64,6 +67,12 @@ services:
             do mc mb minio/\"$${bucket}\" --ignore-existing; 
             mc anonymous set public minio/\"$${bucket}\";
         done;
+        if [ $(mc ls minio/$${MINIO_SOURCE_DATA_BUCKET} 2>&1 | wc -l) -eq 0 ]; then 
+          echo \"Uploading source data into minio bucket $${MINIO_SOURCE_DATA_BUCKET}\";
+          mc cp --recursive /source-data/* minio/$${MINIO_SOURCE_DATA_BUCKET}/; 
+        else 
+          echo \"Source data already exists in bucket $${MINIO_SOURCE_DATA_BUCKET}, skipping data upload\"; 
+        fi;
       "
 
   mlflow-postgres:
@@ -76,7 +85,7 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_mlflow_password
       POSTGRES_DB: ${POSTGRES_DB:-mlflow}
     volumes:
-      - ${POSTGRES_DATA_PATH:-./postgres/mlflow-data}:/var/lib/postgresql/data
+      - ${POSTGRES_MLFLOW_DATA_PATH:-./postgres/mlflow-data}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $(cat $${POSTGRES_USER_FILE})"]
       interval: 5s

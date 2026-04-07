@@ -22,6 +22,6 @@ USER streamlit
 WORKDIR /home/streamlit
 
 # copy application files
-COPY app-serving.py weather_data.py metrics.py utils.py ./
+COPY app-serving.py metrics.py ../common/weather_data.py ../common/utils.py ./
 
 EXPOSE 8501

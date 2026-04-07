@@ -30,6 +30,7 @@ if [ ! -z $(docker images -q ${airflow_extended_image}) ]; then
     docker rmi ${airflow_extended_image}
 fi
 
+
 # remove app-serving custom image
 app_extended_image=$(grep APP_EXTENDED_IMAGE .env | cut -d '=' -f2)
 if [ -z ${app_extended_image} ]; then
