@@ -349,9 +349,9 @@ services:
     <<: *airflow-common
     command: celery flower
     ports:
-      - "127.0.0.1:5555:5555"
+      - "127.0.0.1:${FLOWER_PORT:-5555}:5555"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:5555/"]
+      test: ["CMD", "curl", "--fail", "http://localhost:${FLOWER_PORT:-5555}/"]
       interval: 30s
       timeout: 10s
       retries: 5

@@ -5,7 +5,7 @@ FROM ${PYTHON_IMAGE} AS builder
 
 
 # Install dependencies in the virtual environment
-COPY app-serving-requirements.txt .
+COPY app-serving/app-serving-requirements.txt .
 # This URLLIB3 setting is necessary not to let urllib3.future required by open-meteo shadow the actual urllib3 package ( https://github.com/jawah/urllib3.future )
 RUN pip install uv && \
     (URLLIB3_NO_OVERRIDE=1 uv pip install --system --no-cache niquests --no-binary urllib3-future -r ./app-serving-requirements.txt) && \
@@ -22,6 +22,6 @@ USER streamlit
 WORKDIR /home/streamlit
 
 # copy application files
-COPY app-serving.py metrics.py ../common/weather_data.py ../common/utils.py ./
+COPY app-serving/app-serving.py app-serving/metrics.py common/weather_data.py common/utils.py ./
 
 EXPOSE 8501

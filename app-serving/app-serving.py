@@ -20,7 +20,7 @@ import pandas as pd
 import xgboost as xgb
 
 # Mlflow
-from mlflow import mlflow, MlflowClient
+from mlflow import mlflow, MlflowClient, MlflowException
 
 
 # Drift analysis
@@ -96,12 +96,18 @@ def get_model_artifacts():
     try:
 
         # get a model version by alias
-        mlflow_version = client.get_model_version_by_alias(model_name, model_production_alias)
+        
+        mlflow_version = None
+
+        try:
+            mlflow_version = client.get_model_version_by_alias(model_name, model_production_alias)
+        except MlflowException as e:
+            pass
 
         if mlflow_version is None:
              # No production model version found, trigger the model training pipeline
              dag_run_id = trigger_airflow_dag(dag_id=model_training_pipeline_dag_id)
-             raise RuntimeError(f"No version found for model '{model_name}' with alias '{model_production_alias}', triggered model training pipeline with dag run id: {dag_run_id}")
+             raise RuntimeError(f"No version found for model '{model_name}' with alias '{model_production_alias}', triggered model training pipeline '{model_training_pipeline_dag_id}' with dag run id: {dag_run_id}")
 
         # Load model
         booster = mlflow.xgboost.load_model(f"models:/{model_name}@{model_production_alias}")
@@ -116,7 +122,7 @@ def get_model_artifacts():
     
     
     except Exception as e:
-        raise RuntimeError(f"Failed to load model artifact: {e}") from e    
+        raise RuntimeError(f"Failed to load model artifact: {e}") from e
 
 
 

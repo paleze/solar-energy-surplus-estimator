@@ -3,6 +3,7 @@ set -e
 home_dir=$(pwd)
 
 # *** Airflow setup ***
+echo
 echo "Setting up Airflow ..."
 
 # Performs the manual setup steps for Airflow project described at https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html
@@ -38,39 +39,68 @@ mkdir -p ${POSTGRES_AIRFLOW_DATA_PATH:-./postgres/airflow-data}
 echo "Building Airflow Docker image..."
 cd ${home_dir}/airflow
 ./airflow-build.sh
+cd ${home_dir}
 
 
 # *** MLFlow setup ***
 # Create postegres data folder
-echo "Setting up Minio ..."
+echo
+echo "Setting up MlFlow ..."
 mkdir -p ${POSTGRES_MLFLOW_DATA_PATH:-./postgres/mlflow-data}
 
 
 # *** Minio Setup ***
+echo
 echo "Setting up Minio ..."
-mkdir ${MINIO_DATA_PATH:-./minio/data}
+mkdir -p ${MINIO_DATA_PATH:-./minio/data}
 
 
 
 # *** Monitoring setup ***
+echo
 echo "Setting up monitoring ..."
 # create monitoring folders and change permissions
 mkdir -p ${PROMETHEUS_DATA_PATH:-./prometheus/data}
-chmod -R o+w ${PROMETHEUS_DATA_PATH:-./prometheus/data}
+chmod o+w ${PROMETHEUS_DATA_PATH:-./prometheus/data}
 mkdir -p ${GRAFANA_DATA_PATH:-./grafana/data}
-chmod -R o+w ${GRAFANA_DATA_PATH:-./grafana/data}
+chmod o+w ${GRAFANA_DATA_PATH:-./grafana/data}
 
 
 # *** App-serving setup ***
 
 # Build the app-serving Docker image
+echo
 echo "Building app-serving image..."
 cd ${home_dir}/app-serving
 ./app-serving-build.sh
+cd ${home_dir}
 
 
+# *** Run docker compose ***
+echo 
+echo "Starting docker stack ..."
+docker compose up -d
+
+echo
+echo "Waiting for containers to become healthy ..."
+time=0
+timeout=30
+while (( $(docker ps | grep estimator | grep -v "(healthy)" | wc -l) > 0 && $time<$timeout )); do 
+    time=$((time+1))
+    sleep 1
+done
+if [ "$time" -eq "$timeout" ];then
+    echo "Error: some containers did not become healthy after $timeout seconds, check with 'docker ps'"
+    echo
+    exit 1
+fi
 
 
+# Show tab urls to open
+echo
+./show-tab-urls.sh
+
+echo
 echo "Setup completed."
 
 

@@ -15,7 +15,7 @@ Follow these steps to setup the environment:
     - create folders
     - build custom images
 
-- run `docker compose up -d` to start stack containers (you can have a nice view of running containers by executing `watch 'docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"` in another terminal)
+- run `docker compose up -d` to start stack containers (you can have a nice view of running containers by executing `watch 'docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"'` in another terminal)
 
 - open the `Minio`, `MlFlow`, and `Airflow` web pages on `localhost` at the corresponding configured ports
 

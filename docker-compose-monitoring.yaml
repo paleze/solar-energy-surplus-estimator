@@ -11,7 +11,6 @@ services:
   # Prometheus for metric collection
   prometheus:
     image: prom/prometheus:v3.10.0
-    container_name: prometheus
     user: "${AIRFLOW_UID:-50000}:0"
     ports:
       - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
@@ -34,7 +33,6 @@ services:
   # Grafana for metrics visualization
   grafana:
     image: grafana/grafana:12.4.2
-    container_name: grafana
     ports:
       - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
     secrets:
