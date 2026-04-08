@@ -84,7 +84,7 @@ docker compose up -d
 echo
 echo "Waiting for containers to become healthy ..."
 time=0
-timeout=30
+timeout=60
 while (( $(docker ps | grep estimator | grep -v "(healthy)" | wc -l) > 0 && $time<$timeout )); do 
     time=$((time+1))
     sleep 1

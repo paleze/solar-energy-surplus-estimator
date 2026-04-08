@@ -5,7 +5,7 @@ from minio import Minio
 
 s3_client = None
 
-def get_secret_from_env_or_file(env_var, file_path_var=None):
+def get_secret_from_env_or_file(env_var=None, file_path_var=None):
     """
     Retrieve a secret value from an environment variable or a file.
 
@@ -16,9 +16,10 @@ def get_secret_from_env_or_file(env_var, file_path_var=None):
     Returns:
     - str: The secret value.
     """
-    secret = os.getenv(env_var)
-    if secret is not None:
-        return secret
+    if env_var is not None:
+        secret = os.getenv(env_var)
+        if secret is not None:
+            return secret
 
     if file_path_var is not None and os.path.exists(file_path_var):
         try:
