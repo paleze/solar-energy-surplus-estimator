@@ -74,6 +74,8 @@ x-airflow-common:
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
     # The following line can be used to set a custom config file, stored in the local config folder
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
+    # Remove celery warnings about visibility timeout
+    AIRFLOW__CELERY_BROKER_TRANSPORT_OPTIONS__VISIBILITY_TIMEOUT: 21600
 
     # Set MinIO environment variables
     MINIO_HOST: ${MINIO_HOST:-minio}

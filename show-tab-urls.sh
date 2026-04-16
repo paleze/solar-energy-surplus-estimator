@@ -1,5 +1,5 @@
 
-echo "Right-click on these links to open project components web pages (default credentials in README.md or specific ones in .env file):"
+echo "Right-click on these links and select 'Open link' to open project components web pages (default credentials in README.md or specific ones in .env file):"
 echo
 echo "Minio:      http://localhost:${MINIO_HOST_CONSOLE_PORT:-9001}"
 echo "Airflow:    http://localhost:8080/dags/solar_energy_surplus_estimator_model_pipeline" 
