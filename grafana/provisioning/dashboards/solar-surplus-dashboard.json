@@ -602,7 +602,7 @@
     "list": []
   },
   "time": {
-    "from": "now-12h",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {},
