@@ -23,6 +23,7 @@ services:
   # Minio Object Storage
   minio:
     image: minio/minio:${MINIO_IMAGE:-RELEASE.2025-09-07T16-13-09Z-cpuv1}
+    user: "${AIRFLOW_UID:-50000}:0"
     ports:
       - "127.0.0.1:${MINIO_HOST_API_PORT:-9000}:9000" # API port
       - "127.0.0.1:${MINIO_HOST_CONSOLE_PORT:-9001}:9001" # console port
@@ -77,6 +78,7 @@ services:
 
   mlflow-postgres:
     image: postgres:15
+    user: "${AIRFLOW_UID:-50000}:0"
     secrets:
       - postgres_mlflow_user
       - postgres_mlflow_password

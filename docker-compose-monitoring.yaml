@@ -33,6 +33,7 @@ services:
   # Grafana for metrics visualization
   grafana:
     image: grafana/grafana:12.4.2
+    user: "${AIRFLOW_UID:-50000}:0"
     ports:
       - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
     secrets:

@@ -23,19 +23,19 @@ done
 
 echo
 echo "Removing Postgres folders ..."
-sudo rm -rf ${POSTGRES_AIRFLOW_DATA_PATH:-./postgres/airflow-data}
-sudo rm -rf ${POSTGRES_MLFLOW_DATA_PATH:-./postgres/mlflow-data}
+rm -rf ${POSTGRES_AIRFLOW_DATA_PATH:-./postgres/airflow-data}
+rm -rf ${POSTGRES_MLFLOW_DATA_PATH:-./postgres/mlflow-data}
 
 
 echo
 echo "Removing monitoring folders ..."
-sudo rm -rf ${PROMETHEUS_DATA_PATH:-./prometheus/data}
-sudo rm -rf ${GRAFANA_DATA_PATH:-./grafana/data}
+rm -rf ${PROMETHEUS_DATA_PATH:-./prometheus/data}
+rm -rf ${GRAFANA_DATA_PATH:-./grafana/data}
 
 
 echo
 echo "Removing Minio folders ..."
-sudo rm -rf ${MINIO_DATA_PATH:-./minio/data}
+rm -rf ${MINIO_DATA_PATH:-./minio/data}
 
 # remove airflow extended image
 echo

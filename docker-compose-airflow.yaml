@@ -122,6 +122,7 @@ secrets:
 services:
   airflow-postgres:
     image: postgres:16
+    user: "${AIRFLOW_UID:-50000}:0"
     secrets:
       - postgres_airflow_user
       - postgres_airflow_password
