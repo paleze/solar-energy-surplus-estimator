@@ -47,8 +47,7 @@ echo
 ./show-tab-urls.sh
 
 echo
-echo "Start completed."
-
+echo "Start completed"
 echo
 
 

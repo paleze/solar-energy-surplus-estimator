@@ -59,6 +59,6 @@ mkdir -p ${GRAFANA_DATA_PATH:-./grafana/data}
 chmod o+w ${GRAFANA_DATA_PATH:-./grafana/data}
 
 
-echo "Setup completed."
-
+echo "Setup completed"
+echo
 

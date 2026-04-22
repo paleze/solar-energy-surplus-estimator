@@ -65,3 +65,4 @@ fi
 
 echo
 echo "Cleanup completed"
+echo
