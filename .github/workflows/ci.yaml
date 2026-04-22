@@ -92,7 +92,7 @@ jobs:
       - name: set env variables from .env.demo file
         run: cp .env.demo .env
 
-      - name: run airflow setup script
+      - name: run setup script
         run: ./setup.sh
     
       - name: Login to GitHub Container Registry
