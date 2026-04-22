@@ -1,8 +1,11 @@
 
 set -e
 
+home_dir=$(pwd)
+
 # Setup environment 
 ./setup.sh
+echo
 
 # Build the Airflow Docker image
 echo "Building Airflow Docker image..."
@@ -44,7 +47,9 @@ echo
 ./show-tab-urls.sh
 
 echo
-echo "Setup completed."
+echo "Start completed."
+
+echo
 
 
 
