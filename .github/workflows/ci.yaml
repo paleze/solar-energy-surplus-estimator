@@ -52,7 +52,7 @@ jobs:
         env:
           AIRFLOW_IMAGE_CACHE_KEY: estimator-custom-airflow-${{hashFiles('airflow-requirements.txt')}}
         with:
-          context: .
+          context: airflow
           file: ./airflow.Dockerfile
           tags: ${{ env.IMAGE_TAG_PREFIX }}estimator-custom-airflow:latest
           build-args: |
@@ -68,7 +68,7 @@ jobs:
         env:
           APP_SERVING_IMAGE_CACHE_KEY: estimator-app-serving-${{hashFiles('app-serving.py')}}-${{hashFiles('weather_data.py')}}
         with: 
-          context: .
+          context: app-serving
           file: ./app-serving.Dockerfile
           tags: ${{ env.IMAGE_TAG_PREFIX }}estimator-app-serving:latest
           build-args: |

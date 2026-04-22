@@ -35,13 +35,6 @@ done
 mkdir -p ${POSTGRES_AIRFLOW_DATA_PATH:-./postgres/airflow-data}
 
 
-# Build the Airflow Docker image
-echo "Building Airflow Docker image..."
-cd ${home_dir}/airflow
-./airflow-build.sh
-cd ${home_dir}
-
-
 # *** MLFlow setup ***
 # Create postegres data folder
 echo
@@ -66,12 +59,6 @@ mkdir -p ${GRAFANA_DATA_PATH:-./grafana/data}
 chmod o+w ${GRAFANA_DATA_PATH:-./grafana/data}
 
 
-# *** App-serving setup ***
+echo "Setup completed."
 
-# Build the app-serving Docker image
-echo
-echo "Building app-serving image..."
-cd ${home_dir}/app-serving
-./app-serving-build.sh
-cd ${home_dir}
 
