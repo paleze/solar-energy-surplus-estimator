@@ -1,1 +1,0 @@
-docker build -f app-serving.Dockerfile -t estimator-app-serving:latest --build-arg PYTHON_IMAGE=${PYTHON_IMAGE:-python:3.13.12-slim} .

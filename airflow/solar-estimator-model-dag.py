@@ -415,6 +415,7 @@ with DAG(
     default_args=default_args,
     start_date=None,
     catchup=False,
+    is_paused_upon_creation=False,
     tags=['solar-estimator'],
 ) as dag:
     

@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 import os
 import time
 import logging
+from logging import getLogger
 import pickle
 import json
 import requests
@@ -20,7 +21,7 @@ import pandas as pd
 import xgboost as xgb
 
 # Mlflow
-from mlflow import mlflow, MlflowClient
+from mlflow import mlflow, MlflowClient, MlflowException
 
 
 # Drift analysis
@@ -33,6 +34,7 @@ from streamlit_extras.prometheus import streamlit_registry
 
 import utils
 
+app_logger = None
 
 # Set evaluation features 
 categorical_features=['time', 'month','weather_code', 'cloud_cover']
@@ -96,12 +98,18 @@ def get_model_artifacts():
     try:
 
         # get a model version by alias
-        mlflow_version = client.get_model_version_by_alias(model_name, model_production_alias)
+        
+        mlflow_version = None
+
+        try:
+            mlflow_version = client.get_model_version_by_alias(model_name, model_production_alias)
+        except MlflowException as e:
+            pass
 
         if mlflow_version is None:
              # No production model version found, trigger the model training pipeline
              dag_run_id = trigger_airflow_dag(dag_id=model_training_pipeline_dag_id)
-             raise RuntimeError(f"No version found for model '{model_name}' with alias '{model_production_alias}', triggered model training pipeline with dag run id: {dag_run_id}")
+             raise RuntimeError(f"No version found for model '{model_name}' with alias '{model_production_alias}', triggered model training pipeline '{model_training_pipeline_dag_id}' with dag run id: {dag_run_id}")
 
         # Load model
         booster = mlflow.xgboost.load_model(f"models:/{model_name}@{model_production_alias}")
@@ -116,7 +124,7 @@ def get_model_artifacts():
     
     
     except Exception as e:
-        raise RuntimeError(f"Failed to load model artifact: {e}") from e    
+        raise RuntimeError(f"Failed to load model artifact: {e}") from e
 
 
 
@@ -133,7 +141,7 @@ def save_prediction_results(df):
             try:
                 utils.get_file_from_bucket(analytics_data_bucket, prediction_results_path)
             except Exception as e:
-                logging.error(f"Failed to download prediction results file: {e}, creating a new one")
+                app_logger.error(f"Failed to download prediction results file: {e}, creating a new one")
 
         # Update local prediction results file with new predictions
         df.to_csv(prediction_results_path, sep='\t', encoding='utf-8', index=False, header=(not os.path.exists(prediction_results_path)), mode='a')        
@@ -183,9 +191,9 @@ def predict(df_eval) -> float:
         metrics.prediction_latency.labels(time=curr_time, month=curr_month).observe(time.time() - start_time)
         metrics.prediction_counter.labels(time=curr_time, month=curr_month).inc()
         
-        logging.info(f"Solar surplus predictions: {y_pred}")
-        logging.info(f"Solar surplus predictions (zero-bottmoed): {y_pred_bottomed}")
-        logging.info(f"Total solar surplus prediction for the rest of day: {solar_surplus_prediction}")
+        app_logger.info(f"Solar surplus predictions: {y_pred}")
+        app_logger.info(f"Solar surplus predictions (zero-bottmoed): {y_pred_bottomed}")
+        app_logger.info(f"Total solar surplus prediction for the rest of day: {solar_surplus_prediction}")
 
         # Append prediction results to csv file for later drift analysis
         # df_eval[target_feature] = solar_surplus_prediction
@@ -221,7 +229,7 @@ def get_evaluation_data(evaluation_date, evaluation_time):
     
     # Get weather forecast
     df_wf_hourly = wd.get_weather_data(start_date=evaluation_date_str, end_date=evaluation_date_str,latitude=latitude,longitude=longitude, timezone=timezone)
-    logging.info("Weather forecast hourly data\n", df_wf_hourly)
+    app_logger.info("Weather forecast hourly data\n", df_wf_hourly)
 
     # Features engineering
     df_eval=pd.DataFrame()
@@ -337,14 +345,16 @@ def get_docker_secret(secret_name):
     """
 
     file_path = f"/run/secrets/{secret_name}"
-    if os.path.exists(file_path):
-        try:
-            with open(file_path, 'r') as file:
-                return file.read().strip()
-        except Exception as e:
-            raise RuntimeError(f"Failed to read secret from file {file_path}: {e}") from e
-    else:
-        raise RuntimeError(f"Docker secret file {file_path} not found for secret {secret_name}")
+    return utils.get_secret_from_env_or_file(secret_name,file_path_var=file_path)
+
+    # if os.path.exists(file_path):
+    #     try:
+    #         with open(file_path, 'r') as file:
+    #             return file.read().strip()
+    #     except Exception as e:
+    #         raise RuntimeError(f"Failed to read secret from file {file_path}: {e}") from e
+    # else:
+    #     raise RuntimeError(f"Docker secret file {file_path} not found for secret {secret_name}")
 
 
 def is_jwt_token_valid(jwt_token):
@@ -379,11 +389,13 @@ def get_airflow_access_token():
     if airflow_access_token is not None and is_jwt_token_valid(airflow_access_token):
         return airflow_access_token
 
+    app_logger.info("Requesting aiflow token")
+
     endpoint = f"{airflow_url}/auth/token"
 
     # Get Airflow credentials from docker secrets
-    airflow_user=get_docker_secret("airflow_user")
-    airflow_password=get_docker_secret("airflow_password")
+    airflow_user=utils.get_secret_from_env_or_file(file_path_var="/run/secrets/airflow_user")
+    airflow_password=utils.get_secret_from_env_or_file(file_path_var="/run/secrets/airflow_password")
     
     payload = {
         "username": f"{airflow_user}",
@@ -401,6 +413,9 @@ def get_airflow_access_token():
         
         token_data = response.json()
         airflow_access_token = token_data['access_token']
+
+        app_logger.info(f"Aiflow token: {airflow_access_token}")
+
         return airflow_access_token
         
     except requests.exceptions.HTTPError as e:
@@ -510,6 +525,12 @@ def trigger_airflow_dag(dag_id, conf=None, logical_date=None):
 def main():
 
     try:
+
+        global app_logger
+        if app_logger is None:
+            app_logger = getLogger()
+            app_logger.addHandler(logging.StreamHandler())
+            app_logger.setLevel(logging.INFO)
 
         # Initialize mlflow
         init_mlflow()

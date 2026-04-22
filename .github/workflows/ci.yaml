@@ -50,10 +50,10 @@ jobs:
       - name: Build and cache airflow custom docker image
         uses: docker/build-push-action@v7
         env:
-          AIRFLOW_IMAGE_CACHE_KEY: estimator-custom-airflow-${{hashFiles('airflow-requirements.txt')}}
+          AIRFLOW_IMAGE_CACHE_KEY: estimator-custom-airflow-${{hashFiles('./airflow/*.txt','./airflow/*.py','./common/*.py')}}
         with:
           context: .
-          file: ./airflow.Dockerfile
+          file: ./airflow/airflow.Dockerfile
           tags: ${{ env.IMAGE_TAG_PREFIX }}estimator-custom-airflow:latest
           build-args: |
             AIRFLOW_VERSION=${{env.AIRFLOW_VERSION || '3.1.6' }}
@@ -66,10 +66,10 @@ jobs:
       - name: Build and cache app-serving docker image
         uses: docker/build-push-action@v7
         env:
-          APP_SERVING_IMAGE_CACHE_KEY: estimator-app-serving-${{hashFiles('app-serving.py')}}-${{hashFiles('weather_data.py')}}
+          APP_SERVING_IMAGE_CACHE_KEY: estimator-app-serving-${{hashFiles('./app-serving/*.txt','./app-serving/*.py','./common/*.py')}}
         with: 
           context: .
-          file: ./app-serving.Dockerfile
+          file: ./app-serving/app-serving.Dockerfile
           tags: ${{ env.IMAGE_TAG_PREFIX }}estimator-app-serving:latest
           build-args: |
             PYTHON_IMAGE=${{ env.PYTHON_IMAGE || 'python:3.13.12-slim' }}
@@ -92,7 +92,7 @@ jobs:
       - name: set env variables from .env.demo file
         run: cp .env.demo .env
 
-      - name: run airflow setup script
+      - name: run setup script
         run: ./setup.sh
     
       - name: Login to GitHub Container Registry
