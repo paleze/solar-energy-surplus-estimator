@@ -542,6 +542,7 @@ def main():
         st.header("Input Features")
         evaluation_date = st.date_input("Date (YYYY/MM/dd):", value=current_date)
         evaluation_time = st.time_input("Start time (HH:MM):", value=current_time)
+        
         battery_full_capacity = st.number_input("Battery capacity (KWh):", min_value=0.0, step=0.1, value=battery_full_capacity, format="%.1f")
         battery_usage_percentage = st.number_input("Battery capacity usage (%):", min_value=0, max_value=100)
         
