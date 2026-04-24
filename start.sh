@@ -41,6 +41,10 @@ if [ "$time" -eq "$timeout" ];then
     exit 1
 fi
 
+echo
+echo "Containers status:"
+echo
+docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}" | grep "estimator"
 
 # Show tab urls to open
 echo
@@ -49,7 +53,3 @@ echo
 echo
 echo "Start completed"
 echo
-
-
-
-

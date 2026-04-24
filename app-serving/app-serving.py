@@ -347,15 +347,6 @@ def get_docker_secret(secret_name):
     file_path = f"/run/secrets/{secret_name}"
     return utils.get_secret_from_env_or_file(secret_name,file_path_var=file_path)
 
-    # if os.path.exists(file_path):
-    #     try:
-    #         with open(file_path, 'r') as file:
-    #             return file.read().strip()
-    #     except Exception as e:
-    #         raise RuntimeError(f"Failed to read secret from file {file_path}: {e}") from e
-    # else:
-    #     raise RuntimeError(f"Docker secret file {file_path} not found for secret {secret_name}")
-
 
 def is_jwt_token_valid(jwt_token):
     """
@@ -551,6 +542,7 @@ def main():
         st.header("Input Features")
         evaluation_date = st.date_input("Date (YYYY/MM/dd):", value=current_date)
         evaluation_time = st.time_input("Start time (HH:MM):", value=current_time)
+        
         battery_full_capacity = st.number_input("Battery capacity (KWh):", min_value=0.0, step=0.1, value=battery_full_capacity, format="%.1f")
         battery_usage_percentage = st.number_input("Battery capacity usage (%):", min_value=0, max_value=100)
         

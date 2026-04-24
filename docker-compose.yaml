@@ -109,9 +109,8 @@ services:
       - minio_root_password
       - postgres_mlflow_user
       - postgres_mlflow_password
-
-    environment:
       
+    environment:
       # S3/MinIO settings
       MLFLOW_S3_ENDPOINT_URL: "http://${MINIO_HOST:-minio}:9000"
       MLFLOW_ARTIFACTS_DESTINATION: "s3://${MINIO_MLFLOW_BUCKET:-mlflow}"
@@ -157,16 +156,21 @@ services:
 
   app-serving:
     image: ${IMAGE_TAG_PREFIX:-}estimator-app-serving:latest
+    
     depends_on:
       mlflow:
         condition: service_healthy
+    
     secrets:
       - airflow_user
       - airflow_password
       - minio_root_user
       - minio_root_password
+
     environment:
       
+      TZ: ${SITE_TIMEZONE:-Europe/Berlin} # set container timezone
+
       # Mlflow
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
 
