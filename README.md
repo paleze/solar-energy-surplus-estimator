@@ -46,8 +46,7 @@ The pipeline can be triggered both manually from the Airflow UI or automatically
 
 
 ## Model serving application
-Model serving is implemented with a Streamlit web application accessible by default at `http://localhost:8501`.
-In order to get an energy surplus estimate prediction, the user must enter this information:
+Model serving is implemented with a Streamlit web application. In order to get an energy surplus estimate prediction, the user must enter this information:
 
 - day of interest (defaults to current day)
 - time of the day (defaults to current local time)
