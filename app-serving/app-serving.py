@@ -261,12 +261,18 @@ def perform_drift_analysis(minimum_data_size: int, drift_threshold:float):
     :param prediction_results_filename: path to csv file where the latest prediction results have been stored, and with the history of previous predictions
     """
 
+    # download prediction results file from S3 bucket if it does not exist locally
+    try:
+
+        if not os.path.exists(prediction_results_path):
+           utils.get_file_from_bucket(analytics_data_bucket, prediction_results_path)
+
+    except Exception as e:
+       raise RuntimeError(f"Failed to get past prediction data for drift analysis, please perform some surplus estimation first.")
+    
     try:
         
-        # download prediction results file from S3 bucket if it does not exist locally
-        if not os.path.exists(prediction_results_path):
-            utils.get_file_from_bucket(analytics_data_bucket, prediction_results_path)
-
+        
         # Load prediction results data
         prediction_df = pd.read_csv(prediction_results_path, sep='\t', encoding='utf-8')
 
@@ -335,7 +341,7 @@ def perform_drift_analysis(minimum_data_size: int, drift_threshold:float):
         return drift_report, drift_detected
     
     except Exception as e:
-        st.error(f"⚠️ Failed to perform drift analysis: {e}")
+        st.error(f"⚠️ Error: Failed to perform drift analysis: {e}")
 
 
 def get_docker_secret(secret_name):
@@ -583,7 +589,8 @@ def main():
             width=200, min_value=0.0, value=DEFAULT_DRIF_THRESHOLD,max_value=10.0, step=0.25)
 
         # Perform drift analysis and display results
-        if st.button("Perform Data Drift analysis", type="primary"): 
+        if st.button("Perform Data Drift analysis", type="primary"):
+             
             drift_report, drift_detected = perform_drift_analysis(minimum_data_size=prediction_data_size_threshold, drift_threshold=drift_threshold)
 
             with st.expander("Data Drift Analysis", expanded=True):
@@ -596,12 +603,12 @@ def main():
                     dag_run_id = trigger_airflow_dag(dag_id=model_training_pipeline_dag_id)
                     st.warning(f"✅ Triggered model retraining with dag run id: {dag_run_id}")
                 except Exception as e:
-                    st.error(f"⚠️ Exception: {e}")
+                    st.error(f"⚠️ Error: {e}")
             else:
                 st.success("✅ No data drift detected. Set a lower Drift Score threshold according to the detected Drift Scores to force drift detection and trigger model retraining")
 
     except Exception as e:
-        st.error(f"⚠️ Exception: {e}")
+        st.error(f"⚠️ Error: {e}")
     
 
 if __name__=="__main__":
