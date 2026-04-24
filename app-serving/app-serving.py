@@ -347,15 +347,6 @@ def get_docker_secret(secret_name):
     file_path = f"/run/secrets/{secret_name}"
     return utils.get_secret_from_env_or_file(secret_name,file_path_var=file_path)
 
-    # if os.path.exists(file_path):
-    #     try:
-    #         with open(file_path, 'r') as file:
-    #             return file.read().strip()
-    #     except Exception as e:
-    #         raise RuntimeError(f"Failed to read secret from file {file_path}: {e}") from e
-    # else:
-    #     raise RuntimeError(f"Docker secret file {file_path} not found for secret {secret_name}")
-
 
 def is_jwt_token_valid(jwt_token):
     """
