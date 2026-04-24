@@ -540,11 +540,12 @@ def main():
 
         # Input section
         st.header("Input Features")
-        evaluation_date = st.date_input("Date (YYYY/MM/dd):", value=current_date)
-        evaluation_time = st.time_input("Start time (HH:MM):", value=current_time)
+        evaluation_date = st.date_input("Date (YYYY/MM/dd):", width=200, value=current_date)
+        evaluation_time = st.time_input("Start time (HH:MM):", width=200, value=current_time)
         
-        battery_full_capacity = st.number_input("Battery capacity (KWh):", min_value=0.0, step=0.1, value=battery_full_capacity, format="%.1f")
-        battery_usage_percentage = st.number_input("Battery capacity usage (%):", min_value=0, max_value=100)
+        battery_full_capacity = st.number_input("Battery capacity (KWh):", 
+            width=200, min_value=0.0, step=0.1, value=battery_full_capacity, format="%.1f")
+        battery_usage_percentage = st.number_input("Battery capacity usage (%):", width=200, min_value=0, max_value=100)
         
         # Make prediction
         if st.button("Estimate Surplus", type="primary"):
@@ -575,9 +576,11 @@ def main():
             col3.metric("Predicted solar energy surplus exported to the grid (KWh):", f"{solar_surplus_to_grid:.2f}")
 
         # Data drift section
-        st.subheader("Data Drift Analysis")
-        prediction_data_size_threshold = st.number_input("Prediction data size threshold for computing data drift:", min_value=0, value=PREDICTION_DATA_SIZE_DRIFT_ANALYSIS_THRESHOLD)
-        drift_threshold = st.number_input("Drift Score threshold:", min_value=0.0, value=DEFAULT_DRIF_THRESHOLD,max_value=10.0, step=0.25)
+        st.header("Data Drift Analysis")
+        prediction_data_size_threshold = st.number_input("Predicted samples threshold:",
+            width=200, min_value=0, value=PREDICTION_DATA_SIZE_DRIFT_ANALYSIS_THRESHOLD)
+        drift_threshold = st.number_input("Drift Score threshold:", 
+            width=200, min_value=0.0, value=DEFAULT_DRIF_THRESHOLD,max_value=10.0, step=0.25)
 
         # Perform drift analysis and display results
         if st.button("Perform Data Drift analysis", type="primary"): 
