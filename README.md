@@ -72,8 +72,8 @@ No alerting is set up at the moment.
 Follow these steps to setup the environment:
 
 - copy `.env.demo` file into `.env` and optionally change environment variables
-- run `./start.sh` to finalize environment setup and start the containers (you can have a nice view of them by executing `watch 'docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"'` )
-- click on the links displayed to open components web pages (credendials in `.env` file when needed). They can be displayed anytime by running `./show-tab-urls.sh`.
+- run `./start.sh` to finalize environment setup and start the containers
+- click on the links displayed to open stack components web pages (credendials in `.env` file when needed). Components urls can be displayed anytime by running `./show-tab-urls.sh`.
 
 Run `docker compose stop` to stop the stack without removing containers and `docker compose up -d` to start it again.
 
