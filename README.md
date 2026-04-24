@@ -35,7 +35,7 @@ For sake of simplicity, the application runs locally in a `docker compose` conta
 - **Prometheus** for metrics collection
 - **Grafana** for metrics visualization
 
-**TODO: Architecture schema**
+(![Text](dev/Architecture.drawio.png))
 
 
 ## Machine learning pipeline
