@@ -39,15 +39,16 @@ For sake of simplicity, the application runs locally in a `docker compose` conta
 
 
 ## Machine learning pipeline
-The model training pipeline leverages training data that is automatically uploaded into a Minio bucket during the automated environment setup procedure and it is an obfuscated version of my real home data. The training process includes a hyperparameter optimization step which computes the parameters that provide the best model prediction performance. The resulting model and its parameters are stored in MlFlow with the `production` alias which is leveraged by the model serving application during the inference process to retrive the best model computed so far.
+The model training pipeline leverages training data that is automatically uploaded into a Minio bucket during the automated environment setup procedure and it is an obfuscated version of my real home data. The training process includes a hyperparameters optimization step to compute the parameters that provide the best model prediction performance. The resulting model and its parameters are stored in MlFlow with the `production` alias which is leveraged by the model serving application during the inference process to retrieve the best model computed so far.
 The pipeline can be triggered both manually from the Airflow UI or automatically by the model serving application when no `production` model is found or when a data drift is detected (see the model serving application section for details).
 
 <ins>NOTE</ins>: the training pipeline currently implemented is a basic one and leverages CPUs only, not GPUs. The training process could therefore take several minutes to complete the hyperparameters optimization step. In the meantime, inference is anyway possible if the model being trained is not the first version.
 
 
 ## Model serving application
-Model serving is implemented with a Streamlit application accessible by default at `http://localhost:8501`.
+Model serving is implemented with a Streamlit web application accessible by default at `http://localhost:8501`.
 In order to get an energy surplus estimate prediction, the user must enter this information:
+
 - day of interest (defaults to current day)
 - time of the day (defaults to current local time)
 - home battery capacity (defaults to 13.5 Kwh)
@@ -97,4 +98,5 @@ Any suggestion is appreciated and welcome.
 
 
 ## Credits
-This project has been inspired by the great content you can find in the [MLOps Zoomcamp](https://github.com/DataTalksClub/mlops-zoomcamp) repo.
+- this project has been inspired by the great content found in the [MLOps Zoomcamp](https://github.com/DataTalksClub/mlops-zoomcamp) repo
+- data drift detection leverages [Evidently](https://github.com/evidentlyai/evidently) code samples, please refer to this repo for LICENSE information
