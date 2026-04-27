@@ -1,9 +1,43 @@
 import os
 import logging
 from minio import Minio
+from mlflow import mlflow, MlflowClient, MlflowException
+
+# Get logger
+app_logger = logging.getLogger()
+app_logger.addHandler(logging.StreamHandler())
+app_logger.setLevel(logging.INFO)
 
 
-s3_client = None
+# Airflow data
+model_training_pipeline_dag_id="solar_energy_surplus_estimator_model_pipeline"
+
+class MlflowConfig:
+
+    mlflow_client = None
+
+    def __init__(self):
+
+        """
+        Initialize mlflow
+        """
+
+        self.mlflow_tracking_uri=os.getenv("MLFLOW_TRACKING_URI","http://localhost:5000")
+        self.experiment_name="solar-surplus-estimator-experiment"
+        self.model_name="solar-surplus-estimator"
+        self.model_production_alias="production"
+
+    def get_client(self):
+        if self.mlflow_client is None:
+            self.mlflow_client = MlflowClient(self.mlflow_tracking_uri)
+
+        return self.mlflow_client
+
+
+# Get Mlflow configuration and client
+mlflow_config=MlflowConfig()
+mlflow_client=mlflow_config.get_client()
+
 
 def get_secret_from_env_or_file(env_var=None, file_path_var=None):
     """
@@ -38,11 +72,7 @@ def get_s3_client():
     """
     
     try:
-
-        global s3_client
-        if s3_client is not None:
-            return s3_client
-            
+         
         access_key=get_secret_from_env_or_file("MINIO_ACCESS_KEY","/run/secrets/minio_root_user")
         secret_key=get_secret_from_env_or_file("MINIO_SECRET_KEY","/run/secrets/minio_root_password")
         minio_port=get_secret_from_env_or_file("MINIO_API_PORT")
@@ -65,6 +95,8 @@ def get_s3_client():
     except Exception as e:
         raise RuntimeError("Failed to create Minio client: {error}".format(error=str(e))) from e
 
+# Get s3 client
+s3_client = get_s3_client()
 
 def get_file_from_bucket(bucket_name, download_path, object_name=None):
     
@@ -78,8 +110,6 @@ def get_file_from_bucket(bucket_name, download_path, object_name=None):
 
     try:
         
-        s3_client = get_s3_client()
-
         if not object_name:
             object_name = os.path.basename(download_path)
 
@@ -94,7 +124,6 @@ def get_file_from_bucket(bucket_name, download_path, object_name=None):
 def upload_to_bucket(file_path, bucket_name, object_name=None):
     
     # Upload training data set to Minio bucket
-    s3_client = get_s3_client()
     
     try:
 
@@ -108,3 +137,12 @@ def upload_to_bucket(file_path, bucket_name, object_name=None):
     except Exception as e:
         logging.info(f"Error uploading {file_path} into bucket {bucket_name}: {e}")
         raise e
+
+
+
+
+
+
+
+
+

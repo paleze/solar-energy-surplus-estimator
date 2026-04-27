@@ -52,7 +52,7 @@ def fecth_data(ti, pattern="*.csv", concat=True, add_filename_col=True, sort=Tru
 
     try:
 
-        s3_client = utils.get_s3_client()
+        s3_client = utils.s3_client
 
         source_data_bucket=utils.get_secret_from_env_or_file("MINIO_SOURCE_DATA_BUCKET")
         
@@ -269,7 +269,7 @@ def register_best_model(client, dv):
         with open(preprocessor_file, "wb") as f_out:
             pickle.dump(dv, f_out)
 
-        mlflow.log_artifact(preprocessor_file, artifact_path="preprocessor", run_id=best_run_id)
+        mlflow.log_artifact(preprocessor_file, name="preprocessor", run_id=best_run_id)
 
         logging.info(f"Registered model {model_name} with new version {best_version} has now alias {model_version_alias}")
 
@@ -321,13 +321,14 @@ def train_model(ti):
     y_test = X_Test_df[target].values
 
     # Set experiment tracking
-    experiment_name="solar-surplus-estimator-experiment"
-    mlflow_tracking_uri=utils.get_secret_from_env_or_file("MLFLOW_TRACKING_URI")
+    experiment_name=utils.mlflow_config.experiment_name
+    mlflow_tracking_uri=utils.mlflow_config.mlflow_tracking_uri
+
     mlflow.set_tracking_uri(mlflow_tracking_uri)
     mlflow.set_experiment(experiment_name)
     
     # Get MlFlow Client
-    client = MlflowClient(mlflow_tracking_uri)
+    client = utils.MlflowConfig.get_client()
 
     # Enable auto logging
     mlflow.xgboost.autolog()
