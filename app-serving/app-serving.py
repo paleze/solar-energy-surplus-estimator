@@ -57,15 +57,17 @@ PREDICTION_DATA_SIZE_DRIFT_ANALYSIS_THRESHOLD = 50 # minimum number of predictio
 
 app_logger = utils.app_logger
 
+
 class AirflowMgr:
 
-    airflow_access_token = None
-    app_logger = None
-    airflow_url = None
-
-    def __init__(self, airflow_url="http://airflow-apiserver:8080", app_logger=None):
+    # airflow_access_token = None
+    # app_logger = None
+    # airflow_url = None
+    
+    def __init__(self, airflow_url="http://airflow-apiserver:8080", model_training_pipeline_dag_id="solar_energy_surplus_estimator_model_pipeline", app_logger=None):
         self.app_logger = app_logger
-        self.airflow_url = "http://airflow-apiserver:8080"
+        self.airflow_url = airflow_url
+        self.model_training_pipeline_dag_id = model_training_pipeline_dag_id
 
     def log(self, message):
         if self.app_logger is not None:
@@ -82,7 +84,7 @@ class AirflowMgr:
 
         self.log("Requesting aiflow token")
 
-        endpoint = f"{airflow_url}/auth/token"
+        endpoint = f"{self.airflow_url}/auth/token"
 
         # Get Airflow credentials from docker secrets
         airflow_user=utils.get_secret_from_env_or_file(file_path_var="/run/secrets/airflow_user")
@@ -110,11 +112,11 @@ class AirflowMgr:
             return self.airflow_access_token
             
         except requests.exceptions.HTTPError as e:
-            print(f"HTTP error getting Airflow token: {e.response.status_code}")
-            print(f"Response: {e.response.text}")
+            self.log(f"HTTP error getting Airflow token: {e.response.status_code}")
+            self.log(f"Response: {e.response.text}")
             raise e
         except requests.exceptions.RequestException as e:
-            print(f"Network error getting Airflow token: {e}")
+            self.log(f"Network error getting Airflow token: {e}")
             raise e
 
         
@@ -140,11 +142,11 @@ class AirflowMgr:
             return current_timestamp < exp_timestamp
         
         except Exception as e:
-            print(f"Error checking token validity: {e}")
+            self.log(f"Error checking token validity: {e}")
             return False
 
 
-    def is_dag_running(self, dag_id=utils.model_training_pipeline_dag_id):
+    def is_dag_running(self, dag_id=None):
         """
         Check if the dag_id has any active run in Airflow
 
@@ -152,10 +154,14 @@ class AirflowMgr:
             dag_id: The DAG identifier
         """
 
+        if dag_id is None:
+            dag_id=self.model_training_pipeline_dag_id
+
+
         # Get access token
         access_token = self.get_access_token()
 
-        endpoint = f"{airflow_url}/api/v2/dags/{dag_id}/dagRuns?order_by=-start_date"
+        endpoint = f"{self.airflow_url}/api/v2/dags/{dag_id}/dagRuns?order_by=-start_date"
 
         try:
             response = requests.get(
@@ -176,15 +182,15 @@ class AirflowMgr:
             return is_dag_running
             
         except requests.exceptions.HTTPError as e:
-            print(f"HTTP error triggering DAG: {e.response.status_code}")
-            print(f"Response: {e.response.text}")
+            self.log(f"HTTP error triggering DAG: {e.response.status_code}")
+            self.log(f"Response: {e.response.text}")
             raise e
         except Exception as e:
-            print(f"Unexpected error: {e}")
+            self.log(f"Unexpected error: {e}")
             raise e
 
 
-    def trigger_airflow_dag(self, dag_id=utils.model_training_pipeline_dag_id, conf=None, logical_date=None):
+    def trigger_airflow_dag(self, dag_id=None, conf=None, logical_date=None):
         """
         Trigger an Airflow DAG via REST API
         
@@ -197,11 +203,14 @@ class AirflowMgr:
             DAG run ID if successful, None otherwise
         """
 
+        if dag_id is None:
+            dag_id=self.model_training_pipeline_dag_id
+
         if self.is_dag_running(dag_id):
             raise RuntimeError(f"DAG '{dag_id}' is already running! Please wait for the current run to finish before triggering a new one.")
 
         access_token = self.get_access_token()
-        endpoint = f"{airflow_url}/api/v2/dags/{dag_id}/dagRuns"
+        endpoint = f"{self.airflow_url}/api/v2/dags/{dag_id}/dagRuns"
         
         payload = {
             "logical_date": logical_date if logical_date else datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
@@ -226,15 +235,15 @@ class AirflowMgr:
             
             dag_run = response.json()
             dag_run_id = dag_run['dag_run_id']
-            print(f"DAG triggered successfully: {dag_run_id}")
+            self.log(f"DAG triggered successfully: {dag_run_id}")
             return dag_run_id
             
         except requests.exceptions.HTTPError as e:
-            print(f"HTTP error triggering DAG: {e.response.status_code}")
-            print(f"Response: {e.response.text}")
+            self.log(f"HTTP error triggering DAG: {e.response.status_code}")
+            self.log(f"Response: {e.response.text}")
             raise e
         except requests.exceptions.RequestException as e:
-            print(f"Network error triggering DAG: {e}")
+            self.log(f"Network error triggering DAG: {e}")
             raise e
 
 
@@ -243,9 +252,9 @@ airflow_mgr=AirflowMgr(app_logger=app_logger)
 
 
 def init_mlflow():
-    mlflow_config = utils.mlflow_config
-    mlflow.set_tracking_uri(mlflow_config.mlflow_tracking_uri)
-    mlflow.set_experiment(mlflow_config.experiment_name)
+    mlflow_mgr = utils.mlflow_mgr
+    mlflow.set_tracking_uri(mlflow_mgr.mlflow_tracking_uri)
+    mlflow.set_experiment(mlflow_mgr.experiment_name)
 
 
 @st.cache_resource
@@ -259,6 +268,8 @@ def get_model_artifacts():
         # get a model version by alias
         mlflow_version = None
 
+        model_name=utils.mlflow_mgr.model_name
+        model_production_alias=utils.mlflow_mgr.model_production_alias 
 
         try:
             mlflow_version = utils.mlflow_client.get_model_version_by_alias(model_name, model_production_alias)
@@ -412,6 +423,8 @@ def get_evaluation_data(evaluation_date, evaluation_time):
     return df_eval
 
 
+
+
 def perform_drift_analysis(minimum_data_size: int, drift_threshold:float):
     
     """
@@ -503,14 +516,14 @@ def perform_drift_analysis(minimum_data_size: int, drift_threshold:float):
         st.error(f"⚠️ Error: Failed to perform drift analysis: {e}")
 
 
-def get_docker_secret(secret_name):
+# def get_docker_secret(secret_name):
     
-    """
-    Get secret value from docker secret file
-    """
+#     """
+#     Get secret value from docker secret file
+#     """
 
-    file_path = f"/run/secrets/{secret_name}"
-    return utils.get_secret_from_env_or_file(secret_name,file_path_var=file_path)
+#     file_path = f"/run/secrets/{secret_name}"
+#     return utils.get_secret_from_env_or_file(secret_name,file_path_var=file_path)
 
 
 

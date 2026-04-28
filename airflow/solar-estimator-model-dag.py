@@ -233,8 +233,8 @@ def register_best_model(client, dv):
     # Get best model
     best_run_id, best_run_rmse, best_model_id = get_best_model()
 
-    model_name = "solar-surplus-estimator"
-    model_version_alias = "production"
+    model_name = utils.mlflow_mgr.model_name
+    model_version_alias = utils.mlflow_mgr.model_production_alias
 
     # Get current registered model
     try:
@@ -321,8 +321,8 @@ def train_model(ti):
     y_test = X_Test_df[target].values
 
     # Set experiment tracking
-    experiment_name=utils.mlflow_config.experiment_name
-    mlflow_tracking_uri=utils.mlflow_config.mlflow_tracking_uri
+    experiment_name=utils.mlflow_mgr.experiment_name
+    mlflow_tracking_uri=utils.mlflow_mgr.mlflow_tracking_uri
 
     mlflow.set_tracking_uri(mlflow_tracking_uri)
     mlflow.set_experiment(experiment_name)
