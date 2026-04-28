@@ -22,6 +22,12 @@ USER streamlit
 WORKDIR /home/streamlit
 
 # copy application files
-COPY app-serving/app-serving.py app-serving/metrics.py common/weather_data.py common/utils.py ./
+COPY app-serving/app-serving.py \
+     app-serving/metrics.py \
+     common/weather_data.py \
+     common/utils.py \
+     common/mlflow_mgr.py \
+     common/minio_mgr.py \
+     airflow/airflow_mgr.py ./
 
 EXPOSE 8501
