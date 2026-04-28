@@ -5,25 +5,27 @@ from airflow.providers.standard.operators.python import PythonOperator
 import os
 import logging
 from pathlib import Path
+
 from cadwyn import endpoint
 import requests
-import pickle
 
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction import DictVectorizer
-from sklearn.metrics import root_mean_squared_error 
-
-import xgboost as xgb
-from hyperopt import fmin, tpe, hp, STATUS_OK, Trials # use hyperpot package to perform parameter tuning
-from hyperopt.pyll import scope
-
 
 from mlflow import mlflow, MlflowClient
 
-import weather_data as wd
+# model training and tuning
+import xgboost as xgb
+from hyperopt import fmin, tpe, hp, STATUS_OK, Trials # use hyperpot package to perform parameter tuning
+from hyperopt.pyll import scope
+from sklearn.metrics import root_mean_squared_error 
 
+
+import weather_data as wd
 import utils
+from mlflow_mgr import MlflowMgr
+from minio_mgr import MinioMgr
 
 
 default_args = {
@@ -32,9 +34,7 @@ default_args = {
 }   
 
 
-
-
-def fecth_data(ti, pattern="*.csv", concat=True, add_filename_col=True, sort=True, **read_csv_kwargs) -> pd.DataFrame:
+def fetch_energy_data(ti, pattern="*.csv", concat=True, add_filename_col=True, sort=True, **read_csv_kwargs) -> pd.DataFrame:
     """
     Download files from an S3 bucket and Load CSV files from `directory`.
 
@@ -51,8 +51,10 @@ def fecth_data(ti, pattern="*.csv", concat=True, add_filename_col=True, sort=Tru
     """
 
     try:
-
-        s3_client = utils.s3_client
+        
+        # Get S3 manager instance
+        s3_mgr=MinioMgr()
+        s3_client = s3_mgr.s3_client
 
         source_data_bucket=utils.get_secret_from_env_or_file("MINIO_SOURCE_DATA_BUCKET")
         
@@ -102,13 +104,13 @@ def fecth_data(ti, pattern="*.csv", concat=True, add_filename_col=True, sort=Tru
 
   
 
-def transform_data(ti):
+def transform_energy_data(ti):
 
     """
     Manipulate features in raw data
     """
 
-    df_raw = ti.xcom_pull(task_ids='fetch_data')
+    df_raw = ti.xcom_pull(task_ids='fetch_energy_data')
 
     # Create tranformed DataFrame from raw one
     df=pd.DataFrame()
@@ -146,7 +148,7 @@ def get_weather_data(ti):
     Fetch weather data from Open-Meteo API according to source data date range
     """
 
-    start_date, end_date, _ = ti.xcom_pull(task_ids='transform_data')
+    start_date, end_date, _ = ti.xcom_pull(task_ids='transform_energy_data')
 
     # Get environment variables for location (default is old town Bergamo)
     latitude=float(utils.get_secret_from_env_or_file("SITE_LATITUDE"))
@@ -172,11 +174,12 @@ def get_weather_data(ti):
     
     
 
-def merge_historical_weather(ti):
+def merge_weather_data(ti):
+
     """
     Merge historical weather data with transformed source data
     """
-    _, _, df = ti.xcom_pull(task_ids='transform_data')
+    _, _, df = ti.xcom_pull(task_ids='transform_energy_data')
     hourly_weather_df = ti.xcom_pull(task_ids='get_weather_data')
 
     # merge energy data with weather historical data on timestamp
@@ -211,86 +214,13 @@ def merge_historical_weather(ti):
     return df_merge
 
 
-
-def get_best_model():
-
-    runs = mlflow.search_runs(filter_string="status='FINISHED'")
-    best_run = runs.loc[ runs['metrics.rmse_test'].idxmin() ]
-    best_run_id = best_run['run_id']
-    best_run_rmse = best_run['metrics.rmse_test']
-    logging.info(f'best run_id: {best_run_id}, rmse: {best_run_rmse}')
-
-    model_filter_string=f"source_run_id='{best_run_id}'"
-    models = mlflow.search_logged_models(filter_string=model_filter_string)
-    best_model_id=models.at[0,"model_id"]
-    
-    return best_run_id, best_run_rmse, best_model_id
-
-
-
-def register_best_model(client, dv):
-        
-    # Get best model
-    best_run_id, best_run_rmse, best_model_id = get_best_model()
-
-    model_name = utils.mlflow_mgr.model_name
-    model_version_alias = utils.mlflow_mgr.model_production_alias
-
-    # Get current registered model
-    try:
-
-        model_info = client.get_model_version_by_alias(model_name, model_version_alias)
-
-    except mlflow.exceptions.RestException as e:
-        # Model name or alias not found
-        model_info = None
-
-    if model_info is not None and model_info.run_id==best_run_id:
-        
-        best_version = model_info.version
-        logging.info(f"Current model {model_name} with version {best_version} is still the best one")
-
-    else:
-
-        # register and set alias to a new model
-        model_uri = f"runs:/{best_run_id}/model"
-        best_version = mlflow.register_model(model_uri, model_name).version
-    
-        client.set_registered_model_alias(
-            model_name, model_version_alias, best_version
-        )
-
-        # set temp local model path
-        model_path=Path("/tmp/models")
-        model_path.mkdir(parents=True, exist_ok=True)
-        preprocessor_file=Path.joinpath(model_path,"preprocessor.b")
-
-        # Save preprocessor DictionaryVectorzizer as a best run artifact
-        with open(preprocessor_file, "wb") as f_out:
-            pickle.dump(dv, f_out)
-
-        mlflow.log_artifact(preprocessor_file, name="preprocessor", run_id=best_run_id)
-
-        logging.info(f"Registered model {model_name} with new version {best_version} has now alias {model_version_alias}")
-
-    
-    return { 
-            "best_run_id": best_run_id,
-            "best_run_rmse": best_run_rmse,
-            "best_model_id": best_model_id,
-            "best_version": best_version
-    }
-        
-
-    
-
 def train_model(ti):
 
     """
     Train a model to estimate solar surplus based on weather data
     """
     
-    df_merge = ti.xcom_pull(task_ids='merge_historical_weather')
+    df_merge = ti.xcom_pull(task_ids='merge_weather_data')
 
     # Set features
     categorical=['time', 'month','weather_code','cloud_cover']
@@ -319,17 +249,10 @@ def train_model(ti):
     target = 'solar_surplus'
     y_train = X_Train_df[target].values
     y_test = X_Test_df[target].values
-
-    # Set experiment tracking
-    experiment_name=utils.mlflow_mgr.experiment_name
-    mlflow_tracking_uri=utils.mlflow_mgr.mlflow_tracking_uri
-
-    mlflow.set_tracking_uri(mlflow_tracking_uri)
-    mlflow.set_experiment(experiment_name)
     
     # Get MlFlow Client
-    client = utils.MlflowConfig.get_client()
-
+    mlflow_mgr=MlflowMgr()
+    
     # Enable auto logging
     mlflow.xgboost.autolog()
 
@@ -381,7 +304,7 @@ def train_model(ti):
     )
 
         
-    res = register_best_model(client, dv)
+    res = mlflow_mgr.register_best_model(dv)
     logging.info(f"Model training completed - best_run_id: {res["best_run_id"]}, best rmse: {res["best_run_rmse"]}, best model id: {res["best_model_id"]}, best version: {res["best_version"]}")
 
     return df_merge
@@ -407,8 +330,9 @@ def upload_training_set(ti):
     # Upload training data set to bucket
     analytics_data_bucket=utils.get_secret_from_env_or_file("MINIO_ANALYTICS_DATA_BUCKET")
     
-    utils.upload_to_bucket(training_data_path, analytics_data_bucket)
-       
+    # Get S3 manager instance
+    s3_mgr=MinioMgr()
+    s3_mgr.upload_to_bucket(training_data_path, analytics_data_bucket)
 
 
 with DAG(
@@ -420,9 +344,9 @@ with DAG(
     tags=['solar-estimator'],
 ) as dag:
     
-    fetch_data_task = PythonOperator(
-        task_id='fetch_data',
-        python_callable=fecth_data,
+    fetch_energy_data_task = PythonOperator(
+        task_id='fetch_energy_data',
+        python_callable=fetch_energy_data,
         op_kwargs={
             "pattern": "*.csv",
             "concat": True,
@@ -432,9 +356,9 @@ with DAG(
         },
     )
 
-    transform_data_task = PythonOperator(
-        task_id='transform_data',
-        python_callable=transform_data,
+    transform_energy_data_task = PythonOperator(
+        task_id='transform_energy_data',
+        python_callable=transform_energy_data,
     )
 
     get_weather_data_task = PythonOperator(
@@ -442,9 +366,9 @@ with DAG(
         python_callable=get_weather_data,
     )
 
-    merge_historical_weather_task = PythonOperator(
-        task_id='merge_historical_weather',
-        python_callable=merge_historical_weather,
+    merge_weather_data_task = PythonOperator(
+        task_id='merge_weather_data',
+        python_callable=merge_weather_data,
     )
 
     train_model_task = PythonOperator(
@@ -457,4 +381,4 @@ with DAG(
         python_callable=upload_training_set,
     )
 
-fetch_data_task >> transform_data_task >> get_weather_data_task >> merge_historical_weather_task >> train_model_task >> upload_training_set_task
+fetch_energy_data_task >> transform_energy_data_task >> get_weather_data_task >> merge_weather_data_task >> train_model_task >> upload_training_set_task
