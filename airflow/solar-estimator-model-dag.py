@@ -262,13 +262,13 @@ def train_model(ti):
 
     # Get hyperparameters tuning run parameters from environment variables
     hyperopt_num_boost_round=int(utils.get_secret_from_env_or_file("HYPEROPT_NUM_BOOST_ROUND"))
-    hyperopt_early_max_evals=int(utils.get_secret_from_env_or_file("HYPEROPT_EARLY_MAX_EVALS"))
+    hyperopt_max_evals=int(utils.get_secret_from_env_or_file("HYPEROPT_MAX_EVALS"))
     hyperopt_early_stopping_rounds=int(utils.get_secret_from_env_or_file("HYPEROPT_EARLY_STOPPING_ROUNDS"))
     
     logging.info("*** Start traininig model with hyperparameters optimization")
     logging.info("Optimization runs configured with following parameters (change in env variables if needed):")
     logging.info(f"HYPEROPT_NUM_BOOST_ROUND: {hyperopt_num_boost_round}")
-    logging.info(f"HYPEROPT_EARLY_MAX_EVALS: {hyperopt_early_max_evals}")
+    logging.info(f"HYPEROPT_MAX_EVALS: {hyperopt_max_evals}")
     logging.info(f"HYPEROPT_EARLY_STOPPING_ROUNDS: {hyperopt_early_stopping_rounds}")
 
     # tuning parameters (see https://hyperopt.github.io/hyperopt/ for reference )
@@ -307,8 +307,8 @@ def train_model(ti):
     best_result = fmin(
         fn=hyperparameter_objective,
         space=search_space,
-        algo=tpe.suggest,
-        max_evals=hyperopt_early_max_evals, # number of hyperparameters tuning runs
+        algo=tpe.suggest,``
+        max_evals=hyperopt_max_evals, # number of hyperparameters tuning runs
         trials=Trials()
     )
 
