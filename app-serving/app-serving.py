@@ -133,7 +133,7 @@ def save_prediction_results(df):
     
 
 
-def predict(df_eval) -> float:
+def predict(df_eval):
 
     """
     Predicts the solar energy surplus generated along the day
@@ -178,7 +178,11 @@ def predict(df_eval) -> float:
         # Append prediction results to csv file for later drift analysis
         save_prediction_results(df_eval)
         
-        return solar_surplus_prediction
+        # create a dataframe with predictions to be displayed
+        df_surplus = pd.DataFrame(y_pred_bottomed, columns=[target_feature])
+        df_pred = df_eval.reset_index(drop=True).join(df_surplus)
+
+        return  df_pred, solar_surplus_prediction
     
     except Exception as e:
         raise RuntimeError(f"Failed to perform model predictions: {e}") from e
@@ -343,12 +347,12 @@ def main():
 
         # Input section
         st.header("Input Features")
-        evaluation_date = st.date_input("Date (YYYY/MM/dd):", width=200, value=current_date)
-        evaluation_time = st.time_input("Start time (HH:MM):", width=200, value=current_time)
-        
-        battery_full_capacity = st.number_input("Battery capacity (KWh):", 
-            width=200, min_value=0.0, step=0.1, value=battery_full_capacity, format="%.1f")
-        battery_usage_percentage = st.number_input("Battery capacity usage (%):", width=200, min_value=0, max_value=100)
+        col1, col2, col3, col4 = st.columns(4, border=True)
+        evaluation_date = col1.date_input("Date (YYYY/MM/dd):", width=200, value=current_date, min_value=date(2020, 8, 1), max_value=current_date)
+        evaluation_time = col2.time_input("Start time (HH:MM):", width=200, value=current_time)
+        battery_full_capacity = col3.number_input("Battery capacity (KWh):", 
+            width=200, min_value=0.0, max_value=1000.0, step=0.1, value=battery_full_capacity, format="%.1f")
+        battery_usage_percentage = col4.number_input("Battery capacity usage (%):", width=200, min_value=0, max_value=100)
         
         # Make prediction
         if st.button("Estimate Surplus", type="primary"):
@@ -357,11 +361,16 @@ def main():
 
             # Process input data to be used for model prediction
             df_eval = get_evaluation_data(evaluation_date, evaluation_time)
-     
+
             st.info("Performing prediction...")
 
             # Compute model prediction
-            solar_surplus_prediction = predict(df_eval)/1000 # prediction is returned in Wh
+            df_pred, solar_surplus_prediction = predict(df_eval)
+            solar_surplus_prediction = solar_surplus_prediction/1000 # prediction is returned in Wh
+
+            with st.expander("Prediction data preview", expanded=True):
+                st.dataframe(df_pred.style.format({f"{target_feature}": "{:.1f}".format, "temperature": "{:.1f}".format}),
+                    width=700, hide_index=True)
 
             st.info("Computing results...")
 
@@ -373,16 +382,17 @@ def main():
             # Display results
             st.success(f"✅ Prediction ready")
             st.subheader("Prediction Results")
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3 = st.columns(3, border=True)
             col1.metric("Predicted solar energy surplus generated until sunset (KWh): ", f"{solar_surplus_prediction:.2f}")
             col2.metric("Predicted battery capacity usage at sunset (including stored solar surplus) (%): ", f"{battery_predicted_usage}")
             col3.metric("Predicted solar energy surplus exported to the grid (KWh):", f"{solar_surplus_to_grid:.2f}")
 
         # Data drift section
         st.header("Data Drift Analysis")
-        prediction_data_size_threshold = st.number_input("Predicted samples threshold:",
+        col1, col2 = st.columns(2, border=True, gap="small",width=500)
+        prediction_data_size_threshold = col1.number_input("Predicted samples threshold:",
             width=200, min_value=0, value=PREDICTION_DATA_SIZE_DRIFT_ANALYSIS_THRESHOLD)
-        drift_threshold = st.number_input("Drift Score threshold:", 
+        drift_threshold = col2.number_input("Drift Score threshold:", 
             width=200, min_value=0.0, value=DEFAULT_DRIF_THRESHOLD,max_value=10.0, step=0.25)
 
         # Perform drift analysis and display results
