@@ -256,10 +256,20 @@ def train_model(ti):
     # Enable auto logging
     mlflow.xgboost.autolog()
 
-    logging.info("Start traininig model with hyperparameters optimization ...")
-
     X_Train_dm = xgb.DMatrix(X_train, label=y_train)
     X_test_dm = xgb.DMatrix(X_test, label=y_test)
+
+
+    # Get hyperparameters tuning run parameters from environment variables
+    hyperopt_num_boost_round=int(utils.get_secret_from_env_or_file("HYPEROPT_NUM_BOOST_ROUND"))
+    hyperopt_max_evals=int(utils.get_secret_from_env_or_file("HYPEROPT_MAX_EVALS"))
+    hyperopt_early_stopping_rounds=int(utils.get_secret_from_env_or_file("HYPEROPT_EARLY_STOPPING_ROUNDS"))
+    
+    logging.info("*** Start traininig model with hyperparameters optimization")
+    logging.info("Optimization runs configured with following parameters (change in env variables if needed):")
+    logging.info(f"HYPEROPT_NUM_BOOST_ROUND: {hyperopt_num_boost_round}")
+    logging.info(f"HYPEROPT_MAX_EVALS: {hyperopt_max_evals}")
+    logging.info(f"HYPEROPT_EARLY_STOPPING_ROUNDS: {hyperopt_early_stopping_rounds}")
 
     # tuning parameters (see https://hyperopt.github.io/hyperopt/ for reference )
     search_space = {
@@ -269,24 +279,23 @@ def train_model(ti):
         'reg_lambda': hp.loguniform('reg_lambda', -6, -1),
         'min_child_weight': hp.loguniform('min_child_weight', -1, 3),
         'objective': 'reg:squarederror',
-        'seed': 42
+        'seed': 42,
     }
 
     def hyperparameter_objective(params):
 
         with mlflow.start_run():
 
-            model_type="xgboost"
-            mlflow.set_tag("model_type", model_type)
+            mlflow.set_tag("model_type", "xgboost")
             mlflow.log_params(params)
 
             mlflow.xgboost.autolog()
             booster = xgb.train(
                 params=params,
                 dtrain=X_Train_dm,
-                num_boost_round=1000, # Maximum number of iterations for hyperparameter tuning
+                num_boost_round=hyperopt_num_boost_round, # Maximum number of iterations for hyperparameter tuning
                 evals=[(X_test_dm, 'validation')],
-                early_stopping_rounds=50 # Stop after 50 iterations with no improvement
+                early_stopping_rounds=hyperopt_early_stopping_rounds # Stop when no improvement is present after this nunber of iterations
             )
             y_pred = booster.predict(X_test_dm)
             rmse = root_mean_squared_error(y_test, y_pred)
@@ -299,7 +308,7 @@ def train_model(ti):
         fn=hyperparameter_objective,
         space=search_space,
         algo=tpe.suggest,
-        max_evals=20, # number of hyperparameters tuning runs
+        max_evals=hyperopt_max_evals, # number of hyperparameters tuning runs
         trials=Trials()
     )
 
