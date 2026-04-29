@@ -307,7 +307,7 @@ def train_model(ti):
     best_result = fmin(
         fn=hyperparameter_objective,
         space=search_space,
-        algo=tpe.suggest,``
+        algo=tpe.suggest,
         max_evals=hyperopt_max_evals, # number of hyperparameters tuning runs
         trials=Trials()
     )
