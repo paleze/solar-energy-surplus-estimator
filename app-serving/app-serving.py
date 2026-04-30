@@ -350,9 +350,9 @@ def main():
         col1, col2, col3, col4 = st.columns(4, border=True)
         evaluation_date = col1.date_input("Date (YYYY/MM/dd):", width=200, value=current_date, min_value=date(2020, 8, 1), max_value=current_date)
         evaluation_time = col2.time_input("Start time (HH:MM):", width=200, value=current_time)
-        battery_full_capacity = col3.number_input("Battery capacity (KWh):", 
+        battery_full_capacity = col3.number_input("🔋Battery capacity (KWh):", 
             width=200, min_value=0.0, max_value=1000.0, step=0.1, value=battery_full_capacity, format="%.1f")
-        battery_usage_percentage = col4.number_input("Battery capacity usage (%):", width=200, min_value=0, max_value=100)
+        battery_usage_percentage = col4.number_input("🔋Battery capacity usage (%):", width=200, min_value=0, max_value=100)
         
         # Make prediction
         if st.button("Estimate Surplus", type="primary"):
