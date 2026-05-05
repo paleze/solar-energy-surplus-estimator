@@ -39,7 +39,6 @@ def fetch_energy_data(ti, pattern="*.csv", concat=True, add_filename_col=True, s
     Download files from an S3 bucket and Load CSV files from `directory`.
 
     Args:
-    - endpoint (str): url to folder containing CSV files
     - pattern (str): glob pattern to match files (default "*.csv").
     - concat (bool): if True, return a single concatenated DataFrame; if False, return a list of DataFrames.
     - add_filename_col (bool): if True, add a column '_source_file' with the filename for each row.
@@ -56,10 +55,10 @@ def fetch_energy_data(ti, pattern="*.csv", concat=True, add_filename_col=True, s
         s3_mgr=MinioMgr()
         s3_client = s3_mgr.s3_client
 
+        # Get objects from configured source s3 data bucket
         source_data_bucket=utils.get_secret_from_env_or_file("MINIO_SOURCE_DATA_BUCKET")
-        
         objects = s3_client.list_objects(bucket_name=source_data_bucket)
-        
+
         # List all files in the bucket matching the pattern
         if objects is None:
            raise RuntimeError(f"No objects found in bucket {source_data_bucket} with pattern {pattern}")
@@ -74,7 +73,7 @@ def fetch_energy_data(ti, pattern="*.csv", concat=True, add_filename_col=True, s
             
 
     except requests.RequestException as e:
-        raise RuntimeError(f"Failed to fetch data from {endpoint}: {e}") from e
+        raise RuntimeError(f"Failed to fetch data from bucket {source_data_bucket}: {e}") from e
 
     # Load files from the local directory into a DataFrame
     
@@ -98,7 +97,7 @@ def fetch_energy_data(ti, pattern="*.csv", concat=True, add_filename_col=True, s
     if concat:
         dfs = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
-    logging.info(f"Fetched data frame has {len(df)} rows")
+    logging.info(f"Fetched data frame has {len(dfs)} rows")
 
     return dfs
 
