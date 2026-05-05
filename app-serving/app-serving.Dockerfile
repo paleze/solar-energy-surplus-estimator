@@ -22,7 +22,7 @@ USER streamlit
 WORKDIR /home/streamlit
 
 # copy application files
-COPY app-serving/app-serving.py \
+COPY app-serving/app_serving.py \
      app-serving/metrics.py \
      common/weather_data.py \
      common/utils.py \
