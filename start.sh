@@ -30,7 +30,7 @@ docker compose up -d
 echo
 echo "Waiting for containers to become healthy ..."
 time=0
-timeout=60
+timeout=300
 while (( $(docker ps | grep estimator | grep -v "(healthy)" | wc -l) > 0 && $time<$timeout )); do 
     time=$((time+1))
     sleep 1
@@ -48,7 +48,7 @@ docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}" | grep "
 
 # Show tab urls to open
 echo
-./show-tab-urls.sh
+./show-component-urls.sh
 
 echo
 echo "Start completed"
