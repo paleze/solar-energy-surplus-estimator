@@ -1,6 +1,18 @@
+set -e
+
+
+
 # remove docker compose airflow setup
 echo "Bringing down docker compose setup removing volumes and orphans..."
-docker compose down --volumes --remove-orphans
+# get option to remove all downloaded images
+if [ "$1" = "all" ]; then
+    remove_all_images="all"
+    echo "removing all images downloaded by docker-compose, this will require re-downloading them on next start"
+else
+    remove_all_images="local"
+    echo "removing only images built locally, downloaded images will be kept and reused on next start"
+fi
+docker compose down --volumes --remove-orphans --rmi ${remove_all_images}
 
 
 # Clean airflow folders
@@ -36,6 +48,7 @@ rm -rf ${GRAFANA_DATA_PATH:-./grafana/data}
 echo
 echo "Removing Minio folders ..."
 rm -rf ${MINIO_DATA_PATH:-./minio/data}
+
 
 # remove airflow extended image
 echo

@@ -82,9 +82,9 @@ Follow these steps to setup the environment:
 
 - copy `.env.demo` file into `.env` and optionally change environment variables
 - run `./start.sh` to finalize environment setup and start the containers
-- click on the links displayed to open stack components web pages (credendials in `.env` file when needed). Components urls can be displayed anytime by running `./show-tab-urls.sh`.
+- click on the links displayed to open stack components web pages (credendials in `.env` file when needed). Components urls can be displayed anytime by running `./show-component-urls.sh`.
 
-Run `docker compose stop` to stop the stack without removing containers and `docker compose up -d` to start it again.
+Run `./stop.sh` to stop the stack without removing containers and `./start.sh` to start it again (scripts are idempotent).
 
 
 
@@ -92,7 +92,9 @@ Run `docker compose stop` to stop the stack without removing containers and `doc
 Run `./cleanup.sh` to:
 - take the stack down and remove docker volumes and orphans ( it executes `docker compose down --volumes --remove-orphans` )
 - remove installation folders and local data created by containers
-- remove custom airflow and model serving application images
+- remove custom airflow and model serving application images 
+
+Run `./cleanup.sh all` to remove also **all** images downloaded during container stack creation (they will be downloaded again during next start process)
 
 
 ## Next Steps
