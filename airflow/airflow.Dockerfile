@@ -6,7 +6,7 @@ FROM ${AIRFLOW_IMAGE_NAME}
 
 COPY airflow/airflow-requirements.txt ./
 
-COPY airflow/solar-estimator-model-dag.py \
+COPY airflow/solar_estimator_model_dag.py \
      common/weather_data.py \
      common/utils.py \
      common/mlflow_mgr.py \
