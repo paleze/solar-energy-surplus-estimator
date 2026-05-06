@@ -93,6 +93,13 @@ x-airflow-common:
     SITE_LONGITUDE: ${SITE_LONGITUDE:-9.663174137924273}
     SITE_TIMEZONE: ${SITE_TIMEZONE:-Europe/Berlin}
 
+    # Hyperparameters tuning environment variables. 
+    # These values can be taylored according to available resources and model predictiom quality
+    HYPEROPT_MAX_EVALS: ${HYPEROPT_MAX_EVALS:-5} # number of hyperparameters tuning runs
+    HYPEROPT_NUM_BOOST_ROUND: ${HYPEROPT_NUM_BOOST_ROUND:-1000} # maximum number of iterations per hyperparameters tuning run
+    HYPEROPT_EARLY_STOPPING_ROUNDS: ${HYPEROPT_EARLY_STOPPING_ROUNDS:-10} # maximum number of iterations with no improvement to stop a single run
+    
+
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config

@@ -39,10 +39,20 @@ For sake of simplicity, the application runs locally in a `docker compose` conta
 
 
 ## Machine learning pipeline
-The model training pipeline leverages training data that is automatically uploaded into a Minio bucket during the automated environment setup procedure and it is an obfuscated version of my real home data. The training process includes a hyperparameters optimization step to compute the parameters that provide the best model prediction performance. The resulting model and its parameters are stored in MlFlow with the `production` alias which is leveraged by the model serving application during the inference process to retrieve the best model computed so far.
+The model training pipeline leverages training data that is automatically uploaded into a Minio bucket during the automated environment setup procedure and it is an obfuscated version of real data. The training process includes a hyperparameters optimization step to compute the parameters that provide the best model prediction performance. The resulting model and its parameters are stored in MlFlow with the `production` alias which is leveraged by the model serving application during the inference process to retrieve the best model computed so far.
 The pipeline can be triggered both manually from the Airflow UI or automatically by the model serving application when no `production` model is found or when a data drift is detected (see the model serving application section for details).
 
-<ins>NOTE</ins>: the training pipeline currently implemented is a basic one and leverages CPUs only, not GPUs. The training process could therefore take several minutes to complete the hyperparameters optimization step. In the meantime, inference is anyway possible if the model being trained is not the first version.
+Hyperparameters optimization runs can be configured with the environment variables listed in this table. Default values allow to have a good quality model in ~6 minutes on an old 4-core i7 processor and in ~1 minute on a more powerful one.
+
+
+| Environment variable         | Default  | Description                                                         |
+|------------------------------|----------|---------------------------------------------------------------------|
+|HYPEROPT_MAX_EVALS            | 5        |number of hyperparameters tuning runs                                |             
+|HYPEROPT_NUM_BOOST_ROUND      |1000      |maximum number of iterations per run                                 |
+|HYPEROPT_EARLY_STOPPING_ROUNDS|10        |maximum number of iterations with no improvement to stop a single run|
+
+
+<ins>NOTE</ins>: the training pipeline currently implemented is a basic one and leverages CPUs only, not GPUs. The training process could therefore take several minutes to complete the hyperparameters optimization step. In the meantime, inference is anyway possible if the model being trained is not the first version. 
 
 
 ## Model serving application
@@ -72,9 +82,9 @@ Follow these steps to setup the environment:
 
 - copy `.env.demo` file into `.env` and optionally change environment variables
 - run `./start.sh` to finalize environment setup and start the containers
-- click on the links displayed to open stack components web pages (credendials in `.env` file when needed). Components urls can be displayed anytime by running `./show-tab-urls.sh`.
+- click on the links displayed to open stack components web pages (credendials in `.env` file when needed). Components urls can be displayed anytime by running `./show-component-urls.sh`.
 
-Run `docker compose stop` to stop the stack without removing containers and `docker compose up -d` to start it again.
+Run `./stop.sh` to stop the stack without removing containers and `./start.sh` to start it again (scripts are idempotent).
 
 
 
@@ -82,7 +92,9 @@ Run `docker compose stop` to stop the stack without removing containers and `doc
 Run `./cleanup.sh` to:
 - take the stack down and remove docker volumes and orphans ( it executes `docker compose down --volumes --remove-orphans` )
 - remove installation folders and local data created by containers
-- remove custom airflow and model serving application images
+- remove custom airflow and model serving application images 
+
+Run `./cleanup.sh all` to remove also **all** images downloaded during container stack creation (they will be downloaded again during next start process)
 
 
 ## Next Steps

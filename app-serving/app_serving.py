@@ -3,14 +3,9 @@ import os
 import time
 import logging
 from logging import getLogger
-import pickle
 import json
-import requests
-import jwt
+import pickle
 
-
-# Local files
-import weather_data as wd
 
 # UI
 import streamlit as st
@@ -21,7 +16,7 @@ import pandas as pd
 import xgboost as xgb
 
 # Mlflow
-from mlflow import mlflow, MlflowClient, MlflowException
+from mlflow import MlflowException
 
 
 # Drift analysis
@@ -32,9 +27,14 @@ from evidently.presets import DataDriftPreset
 import metrics
 from streamlit_extras.prometheus import streamlit_registry
 
+# Local files
 import utils
+import weather_data as wd
+from airflow_mgr import AirflowMgr
+from mlflow_mgr import MlflowMgr
+from minio_mgr import MinioMgr
 
-app_logger = None
+
 
 # Set evaluation features 
 categorical_features=['time', 'month','weather_code', 'cloud_cover']
@@ -45,48 +45,28 @@ target_feature = 'solar_surplus'
 drift_categorical_features = ['weather_code', 'cloud_cover']
 drift_numerical_features = numerical_features
 
-
 analytics_data_bucket=utils.get_secret_from_env_or_file("MINIO_ANALYTICS_DATA_BUCKET")
 prediction_results_filename = utils.get_secret_from_env_or_file("MINIO_PREDICTION_RESULTS_FILE_NAME")
 prediction_results_path=f"/tmp/{prediction_results_filename}"
 
 training_data_filename = utils.get_secret_from_env_or_file("MINIO_TRAINING_DATA_FILE_NAME")
 training_data_path=f"/tmp/{training_data_filename}"
-airflow_url = "http://airflow-apiserver:8080"
 
-# Airflow global data
-airflow_access_token=None
-model_training_pipeline_dag_id="solar_energy_surplus_estimator_model_pipeline"
 
 DEFAULT_DRIF_THRESHOLD = 1.0 # default threshold for data drift detection, to be used in evidently report (e.g. for Kolmogorov-Smirnov test)
 PREDICTION_DATA_SIZE_DRIFT_ANALYSIS_THRESHOLD = 50 # minimum number of prediction data points required to perform drift analysis
 
+app_logger = utils.app_logger
 
 
-def init_mlflow():
+# Get Airflow Manager instance
+airflow_mgr=AirflowMgr()
 
-    """
-    Initialize mlflow
-    """
+# Get Mlflow manager instance
+mlflow_mgr=MlflowMgr()
 
-    global mlflow_tracking_uri
-    mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI","http://localhost:5000")
-
-    global experiment_name
-    experiment_name="solar-surplus-estimator-experiment"
-
-    global model_name
-    model_name = "solar-surplus-estimator"
-
-    global model_production_alias
-    model_production_alias = "production"
-
-    mlflow.set_tracking_uri(mlflow_tracking_uri)
-    mlflow.set_experiment(experiment_name)
-
-    # Get MlFlow Client
-    global client
-    client = MlflowClient(mlflow_tracking_uri)
+# Get S3 manager instance
+s3_mgr=MinioMgr()
 
 
 @st.cache_resource
@@ -98,24 +78,23 @@ def get_model_artifacts():
     try:
 
         # get a model version by alias
-        
-        mlflow_version = None
+        prod_version = None
 
         try:
-            mlflow_version = client.get_model_version_by_alias(model_name, model_production_alias)
+            prod_version = mlflow_mgr.get_production_model_version()
         except MlflowException as e:
             pass
 
-        if mlflow_version is None:
-             # No production model version found, trigger the model training pipeline
-             dag_run_id = trigger_airflow_dag(dag_id=model_training_pipeline_dag_id)
-             raise RuntimeError(f"No version found for model '{model_name}' with alias '{model_production_alias}', triggered model training pipeline '{model_training_pipeline_dag_id}' with dag run id: {dag_run_id}")
+        if prod_version is None:
+            # No production model version found, trigger the model training pipeline
+            dag_run_id = airflow_mgr.trigger_airflow_dag()
+            raise RuntimeError(f"No version found for model '{mlflow_mgr.model_name}' with alias '{mlflow_mgr.model_production_alias}'. Triggered model training pipeline '{airflow_mgr.model_training_pipeline_dag_id}' with dag run id: {dag_run_id}, follow pipeline progress in Airflow UI")
 
         # Load model
-        booster = mlflow.xgboost.load_model(f"models:/{model_name}@{model_production_alias}")
+        booster = mlflow_mgr.get_production_model()
         
         # Load data preprocesser DictionaryVectorizer
-        path = client.download_artifacts(run_id=mlflow_version.run_id, path="preprocessor/preprocessor.b")
+        path = mlflow_mgr.client.download_artifacts(run_id=prod_version.run_id, path="preprocessor/preprocessor.b")
 
         with open(path, 'rb') as f_out:
             dv = pickle.load(f_out)
@@ -139,7 +118,7 @@ def save_prediction_results(df):
 
         if not os.path.exists(prediction_results_path):
             try:
-                utils.get_file_from_bucket(analytics_data_bucket, prediction_results_path)
+                s3_mgr.get_file_from_bucket(analytics_data_bucket, prediction_results_path)
             except Exception as e:
                 app_logger.error(f"Failed to download prediction results file: {e}, creating a new one")
 
@@ -147,13 +126,14 @@ def save_prediction_results(df):
         df.to_csv(prediction_results_path, sep='\t', encoding='utf-8', index=False, header=(not os.path.exists(prediction_results_path)), mode='a')        
 
         # Upload updated prediction results file to S3 bucket    
-        utils.upload_to_bucket(prediction_results_path, analytics_data_bucket)
+        s3_mgr.upload_to_bucket(prediction_results_path, analytics_data_bucket)
 
     except Exception as e:
         raise RuntimeError(f"Failed to save prediction results: {e}") from e
     
 
-def predict(df_eval) -> float:
+
+def predict(df_eval):
 
     """
     Predicts the solar energy surplus generated along the day
@@ -196,11 +176,13 @@ def predict(df_eval) -> float:
         app_logger.info(f"Total solar surplus prediction for the rest of day: {solar_surplus_prediction}")
 
         # Append prediction results to csv file for later drift analysis
-        # df_eval[target_feature] = solar_surplus_prediction
-        # df_eval.to_csv(prediction_results_filename, sep='\t', encoding='utf-8', index=False, header=(not os.path.exists(prediction_results_filename)), mode='a')        
         save_prediction_results(df_eval)
         
-        return solar_surplus_prediction
+        # create a dataframe with predictions to be displayed
+        df_surplus = pd.DataFrame(y_pred_bottomed, columns=[target_feature])
+        df_pred = df_eval.reset_index(drop=True).join(df_surplus)
+
+        return  df_pred, solar_surplus_prediction
     
     except Exception as e:
         raise RuntimeError(f"Failed to perform model predictions: {e}") from e
@@ -253,6 +235,8 @@ def get_evaluation_data(evaluation_date, evaluation_time):
     return df_eval
 
 
+
+
 def perform_drift_analysis(minimum_data_size: int, drift_threshold:float):
     
     """
@@ -261,12 +245,18 @@ def perform_drift_analysis(minimum_data_size: int, drift_threshold:float):
     :param prediction_results_filename: path to csv file where the latest prediction results have been stored, and with the history of previous predictions
     """
 
+    # download prediction results file from S3 bucket if it does not exist locally
+    try:
+
+        if not os.path.exists(prediction_results_path):
+           s3_mgr.get_file_from_bucket(analytics_data_bucket, prediction_results_path)
+
+    except Exception as e:
+       raise RuntimeError(f"Failed to get past prediction data for drift analysis, please perform some surplus estimation first.")
+    
     try:
         
-        # download prediction results file from S3 bucket if it does not exist locally
-        if not os.path.exists(prediction_results_path):
-            utils.get_file_from_bucket(analytics_data_bucket, prediction_results_path)
-
+        
         # Load prediction results data
         prediction_df = pd.read_csv(prediction_results_path, sep='\t', encoding='utf-8')
 
@@ -276,7 +266,7 @@ def perform_drift_analysis(minimum_data_size: int, drift_threshold:float):
 
         # download training data file from S3 bucket if it does not exist locally
         if not os.path.exists(training_data_path):
-            utils.get_file_from_bucket(analytics_data_bucket, training_data_path)
+            s3_mgr.get_file_from_bucket(analytics_data_bucket, training_data_path)
 
         # Load training data set to be used as reference data for drift analysis
         reference_df = pd.read_csv(training_data_path, sep='\t', encoding='utf-8')
@@ -335,205 +325,13 @@ def perform_drift_analysis(minimum_data_size: int, drift_threshold:float):
         return drift_report, drift_detected
     
     except Exception as e:
-        st.error(f"⚠️ Failed to perform drift analysis: {e}")
+        st.error(f"⚠️ Error: Failed to perform drift analysis: {e}")
 
-
-def get_docker_secret(secret_name):
-    
-    """
-    Get secret value from docker secret file
-    """
-
-    file_path = f"/run/secrets/{secret_name}"
-    return utils.get_secret_from_env_or_file(secret_name,file_path_var=file_path)
-
-    # if os.path.exists(file_path):
-    #     try:
-    #         with open(file_path, 'r') as file:
-    #             return file.read().strip()
-    #     except Exception as e:
-    #         raise RuntimeError(f"Failed to read secret from file {file_path}: {e}") from e
-    # else:
-    #     raise RuntimeError(f"Docker secret file {file_path} not found for secret {secret_name}")
-
-
-def is_jwt_token_valid(jwt_token):
-    """
-    Check if the given token is still valid by decoding it and checking the expiration time
-
-    Args:
-        token: JWT token to be checked
-    """
-    try:
-        
-        decoded_token = jwt.decode(jwt_token, options={"verify_signature": False})
-        exp_timestamp = decoded_token.get('exp')
-        if exp_timestamp is None:
-            raise RuntimeError("Token does not have an expiration time")
-        
-        current_timestamp = int(time.time())
-        return current_timestamp < exp_timestamp
-    
-    except Exception as e:
-        print(f"Error checking token validity: {e}")
-        return False
-
-
-def get_airflow_access_token():
-    """
-    Get Airflow access token for authentication using Airflow credentials stored in docker secrets
-    """
-
-    # check if airflow access token is still valid
-    global airflow_access_token
-    if airflow_access_token is not None and is_jwt_token_valid(airflow_access_token):
-        return airflow_access_token
-
-    app_logger.info("Requesting aiflow token")
-
-    endpoint = f"{airflow_url}/auth/token"
-
-    # Get Airflow credentials from docker secrets
-    airflow_user=utils.get_secret_from_env_or_file(file_path_var="/run/secrets/airflow_user")
-    airflow_password=utils.get_secret_from_env_or_file(file_path_var="/run/secrets/airflow_password")
-    
-    payload = {
-        "username": f"{airflow_user}",
-        "password": f"{airflow_password}",
-    }
-
-    try:
-        response = requests.post(
-            endpoint,
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=10
-        )
-        response.raise_for_status()
-        
-        token_data = response.json()
-        airflow_access_token = token_data['access_token']
-
-        app_logger.info(f"Aiflow token: {airflow_access_token}")
-
-        return airflow_access_token
-        
-    except requests.exceptions.HTTPError as e:
-        print(f"HTTP error getting Airflow token: {e.response.status_code}")
-        print(f"Response: {e.response.text}")
-        raise e
-    except requests.exceptions.RequestException as e:
-        print(f"Network error getting Airflow token: {e}")
-        raise e
-
-
-def is_dag_running(dag_id):
-    """
-    Check if the dag_id has any active run in Airflow
-
-    Args:
-        dag_id: The DAG identifier
-    """
-
-    # Get access token
-    access_token = get_airflow_access_token()
-
-    endpoint = f"{airflow_url}/api/v2/dags/{dag_id}/dagRuns?order_by=-start_date"
-
-    try:
-        response = requests.get(
-            endpoint,
-            headers={
-                "Authorization": f"Bearer {access_token}"
-            },
-            timeout=10
-        )
-        response.raise_for_status()
-        
-        dag_runs = response.json()
-        is_dag_running = False
-        if 'dag_runs' in dag_runs and len(dag_runs['dag_runs']) > 0:
-            latest_run = dag_runs['dag_runs'][0]
-            is_dag_running = latest_run['state'] in ['running', 'queued']
-
-        return is_dag_running
-        
-    except requests.exceptions.HTTPError as e:
-        print(f"HTTP error triggering DAG: {e.response.status_code}")
-        print(f"Response: {e.response.text}")
-        raise e
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        raise e
-
-
-def trigger_airflow_dag(dag_id, conf=None, logical_date=None):
-    """
-    Trigger an Airflow DAG via REST API
-    
-    Args:
-        dag_id: The DAG identifier
-        conf: Dictionary of configuration parameters
-        logical_date: ISO 8601 formatted execution date`
-    
-    Returns:
-        DAG run ID if successful, None otherwise
-    """
-
-    if is_dag_running(dag_id):
-        raise RuntimeError(f"DAG '{dag_id}' is already running! Please wait for the current run to finish before triggering a new one.")
-
-    access_token = get_airflow_access_token()
-    endpoint = f"{airflow_url}/api/v2/dags/{dag_id}/dagRuns"
-
-    
-    payload = {
-        "logical_date": logical_date if logical_date else datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-        "note": "Triggered from model serving app after data drift detection"
-    }
-
-    
-    if conf:
-        payload["conf"] = conf
-    
-    try:
-        response = requests.post(
-            endpoint,
-            json=payload,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json"
-            },
-            timeout=10
-        )
-        response.raise_for_status()
-        
-        dag_run = response.json()
-        dag_run_id = dag_run['dag_run_id']
-        print(f"DAG triggered successfully: {dag_run_id}")
-        return dag_run_id
-        
-    except requests.exceptions.HTTPError as e:
-        print(f"HTTP error triggering DAG: {e.response.status_code}")
-        print(f"Response: {e.response.text}")
-        raise e
-    except requests.exceptions.RequestException as e:
-        print(f"Network error triggering DAG: {e}")
-        raise e
 
 
 def main():
 
     try:
-
-        global app_logger
-        if app_logger is None:
-            app_logger = getLogger()
-            app_logger.addHandler(logging.StreamHandler())
-            app_logger.setLevel(logging.INFO)
-
-        # Initialize mlflow
-        init_mlflow()
 
         # Get environment variables
         battery_full_capacity = float(os.getenv("BATTERY_CAPACITY_KWH",13.5))
@@ -549,10 +347,12 @@ def main():
 
         # Input section
         st.header("Input Features")
-        evaluation_date = st.date_input("Date (YYYY/MM/dd):", value=current_date)
-        evaluation_time = st.time_input("Start time (HH:MM):", value=current_time)
-        battery_full_capacity = st.number_input("Battery capacity (KWh):", min_value=0.0, step=0.1, value=battery_full_capacity, format="%.1f")
-        battery_usage_percentage = st.number_input("Battery capacity usage (%):", min_value=0, max_value=100)
+        col1, col2, col3, col4 = st.columns(4, border=True)
+        evaluation_date = col1.date_input("Date (YYYY/MM/dd):", width=200, value=current_date, min_value=date(2020, 8, 1), max_value=current_date)
+        evaluation_time = col2.time_input("Start time (HH:MM):", width=200, value=current_time)
+        battery_full_capacity = col3.number_input("🔋Battery capacity (KWh):", 
+            width=200, min_value=0.0, max_value=1000.0, step=0.1, value=battery_full_capacity, format="%.1f")
+        battery_usage_percentage = col4.number_input("🔋Battery capacity usage (%):", width=200, min_value=0, max_value=100)
         
         # Make prediction
         if st.button("Estimate Surplus", type="primary"):
@@ -561,11 +361,16 @@ def main():
 
             # Process input data to be used for model prediction
             df_eval = get_evaluation_data(evaluation_date, evaluation_time)
-     
+
             st.info("Performing prediction...")
 
             # Compute model prediction
-            solar_surplus_prediction = predict(df_eval)/1000 # prediction is returned in Wh
+            df_pred, solar_surplus_prediction = predict(df_eval)
+            solar_surplus_prediction = solar_surplus_prediction/1000 # prediction is returned in Wh
+
+            with st.expander("Prediction data preview", expanded=True):
+                st.dataframe(df_pred.style.format({f"{target_feature}": "{:.1f}".format, "temperature": "{:.1f}".format}),
+                    width=700, hide_index=True)
 
             st.info("Computing results...")
 
@@ -577,18 +382,22 @@ def main():
             # Display results
             st.success(f"✅ Prediction ready")
             st.subheader("Prediction Results")
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3 = st.columns(3, border=True)
             col1.metric("Predicted solar energy surplus generated until sunset (KWh): ", f"{solar_surplus_prediction:.2f}")
             col2.metric("Predicted battery capacity usage at sunset (including stored solar surplus) (%): ", f"{battery_predicted_usage}")
             col3.metric("Predicted solar energy surplus exported to the grid (KWh):", f"{solar_surplus_to_grid:.2f}")
 
         # Data drift section
-        st.subheader("Data Drift Analysis")
-        prediction_data_size_threshold = st.number_input("Prediction data size threshold for computing data drift:", min_value=0, value=PREDICTION_DATA_SIZE_DRIFT_ANALYSIS_THRESHOLD)
-        drift_threshold = st.number_input("Drift Score threshold:", min_value=0.0, value=DEFAULT_DRIF_THRESHOLD,max_value=10.0, step=0.25)
+        st.header("Data Drift Analysis")
+        col1, col2 = st.columns(2, border=True, gap="small",width=500)
+        prediction_data_size_threshold = col1.number_input("Predicted samples threshold:",
+            width=200, min_value=0, value=PREDICTION_DATA_SIZE_DRIFT_ANALYSIS_THRESHOLD)
+        drift_threshold = col2.number_input("Drift Score threshold:", 
+            width=200, min_value=0.0, value=DEFAULT_DRIF_THRESHOLD,max_value=10.0, step=0.25)
 
         # Perform drift analysis and display results
-        if st.button("Perform Data Drift analysis", type="primary"): 
+        if st.button("Perform Data Drift analysis", type="primary"):
+             
             drift_report, drift_detected = perform_drift_analysis(minimum_data_size=prediction_data_size_threshold, drift_threshold=drift_threshold)
 
             with st.expander("Data Drift Analysis", expanded=True):
@@ -598,19 +407,21 @@ def main():
             if drift_detected:
                 try:
                     st.warning(f"⚠️ Data drift detected! A model retraining needs to be triggered")
-                    dag_run_id = trigger_airflow_dag(dag_id=model_training_pipeline_dag_id)
-                    st.warning(f"✅ Triggered model retraining with dag run id: {dag_run_id}")
+                    dag_run_id = airflow_mgr.trigger_airflow_dag()
+                    st.info(f"✅ Triggered model retraining with dag run id: {dag_run_id}, follow pipeline progress in Airflow UI")
                 except Exception as e:
-                    st.error(f"⚠️ Exception: {e}")
+                    st.error(f"⚠️ Error: {e}")
             else:
                 st.success("✅ No data drift detected. Set a lower Drift Score threshold according to the detected Drift Scores to force drift detection and trigger model retraining")
 
     except Exception as e:
-        st.error(f"⚠️ Exception: {e}")
+        st.error(f"⚠️ Error: {e}")
     
 
 if __name__=="__main__":
     main()
+
+
 
 
 
