@@ -1,0 +1,675 @@
+
+
+20251219
+- Project solar-energy-surplus-estimator
+	- TODO
+		X review X_train and X_val so that first uses dv.fit_transform and the second dv.transform only
+			- add a feature like "day of week" to improve prediction quality ??
+		* convert the model into a python script using "jupyter nbconvert --to=script notebook_file.ipynb"
+	
+20260115
+- Project solar-energy-surplus-estimator
+	- local setup with containers
+		- Minio (mimics a cloud S3 server)
+		- MLFlow container using Minio buckets
+		- Apache Airflow
+			- downloads energy data (or create syntetich one) and stores in Minio bucket
+			- create model using energy data and interacting with MLFlow server container
+		- Model Serving container	
+			- connects to MLFlow container to retrieve and serve the last production model
+			- expose metrics about model usage
+			- use streamlit library ?? or Gradio ??
+		- monitoring
+			- detects drifts and retriggers Airflow pipeline to improve model serving
+			- Prometheus ?? Flower ??
+	- TODO
+		* airflow logging ??
+		
+20260121
+- Project solar-energy-surplus-estimator
+	- add airflow docker-compose and scripts
+	- TODO
+		* start both mlflow and airflow stacks by connecting them on the same docker network
+		x set default values for minio and airflow user/password
+		x automatically open all relevant web pages in browser (airflow, mlflow, maybe minio)
+	
+
+20260126
+- Project solar-energy-surplus-estimator
+	- start both mlflow and airflow stacks by connecting them on the same docker network
+	- TODO
+		* merge docker-compose branch into main
+		* create mlops dag file to be run in airflow
+		
+
+
+20260128
+- Project solar-energy-surplus-estimator
+	- add extended airflow image with custom python packages needed for airflow dag
+	- add script to update solar CSV files 
+	- TODO
+		* update .env.demo file with MINIO ROOT USER and PASSWORD to update into Minio data bucket
+		x consider to change application name from "estimator" to "solar-estimator"
+
+				
+20260129
+- Project solar-energy-surplus-estimator
+	- add python file that mimic the dag pipeline by interacting with mlflow and minio containers
+	- successfully run full pipeline with python pipeline file and stored model artifact in minio folder
+	- fix docker compose
+	- TODO
+		* fix urllib3 library error in dag run
+		
+
+20260204
+- Project solar-energy-surplus-estimator
+	- troubleshooting files disappearing from /home/airflow/.local/lib/python3.12/site-packages/urllib3
+		- error executing:
+			- import urllib3.requests
+			- from urllib3 import __version__ as urllib3_version
+		- ISSUE Described here: https://github.com/jawah/urllib3.future 
+	- TODO
+		* fix minio.api object serialization issue in dag
+			[2026-02-04 18:22:56] INFO - Pushing xcom ti=RuntimeTaskInstance(id=UUID('019c29ad-9300-758a-aa4f-2e838163e58b'), task_id='get_s3_client', dag_id='solar_energy_surplus_estimator_model_pipeline', run_id='manual__2026-02-04T17:22:45+00:00', try_number=1, dag_version_id=UUID('019c0947-f77d-7f58-b860-5140cd419c49'), map_index=-1, hostname='0bcf1d1ea90e', context_carrier={}, task=<Task(PythonOperator): get_s3_client>, bundle_instance=LocalDagBundle(name=dags-folder), max_tries=0, start_date=datetime.datetime(2026, 2, 4, 17, 22, 48, 547229, tzinfo=datetime.timezone.utc), end_date=None, state=<TaskInstanceState.RUNNING: 'running'>, is_mapped=False, rendered_map_index=None)
+			[2026-02-04 18:22:56] ERROR - Task failed with exception
+			TypeError: cannot serialize object of type <class 'minio.api.Minio'>
+			File "/home/airflow/.local/lib/python3.12/site-packages/airflow/sdk/execution_time/task_runner.py", line 1015 in run
+			File "/home/airflow/.local/lib/python3.12/site-packages/airflow/sdk/execution_time/task_runner.py", line 1467 in _push_xcom_if_needed
+			File "/home/airflow/.local/lib/python3.12/site-packages/airflow/sdk/execution_time/task_runner.py", line 584 in _xcom_push
+			File "/home/airflow/.local/lib/python3.12/site-packages/airflow/sdk/bases/xcom.py", line 77 in set
+			File "/home/airflow/.local/lib/python3.12/site-packages/airflow/sdk/bases/xcom.py", line 339 in serialize_value
+			File "/home/airflow/.local/lib/python3.12/site-packages/airflow/serialization/serde.py", line 193 in serialize
+
+
+20260205
+- Project solar-energy-surplus-estimator
+	- fixed minio and mlflow connection issues in model dag pipeline 
+	- ran first working dag pipeline with artifacts stored in Minio
+	- TODO
+		* add UI to interact with model and surplus estimator predictions, getting the last promoted "production" model
+		x check whether dictionary vectorizer is correctly uploaded into MlFlow with Pickle
+		- (OPTIONAL) replace model and dictionary vectorizer artifact with a skleran pipeline that saves both and process both when needed (this needs sklearn.pipeline with RandomTreeRegressor and not Xgboost)
+		
+		
+		
+		
+20260206
+- Project solar-energy-surplus-estimator
+	- created jupiter notebook for model serving app
+	- TODO
+		* add UI to interact with model and surplus estimator predictions, getting the last promoted "production" model
+		* Check error in app-serving.ipynb notebook that occurs when current time is single digit ( 9:00 am for example )
+		* Check wrong prediction with negative values when predicting energy surplus in the last afernoon of a winter day
+			{'time': '18:00:00', 'month': '2', 'weather_code': '2.0', 'cloud_cover': 51.0, 'temperature': 6.0}
+				[15.51098]
+				{'time': '18:30:00', 'month': '2', 'weather_code': '2.0', 'cloud_cover': 51.0, 'temperature': 6.0}
+				[8.360183]
+				{'time': '19:00:00', 'month': '2', 'weather_code': '2.0', 'cloud_cover': 72.0, 'temperature': 5.400000095367432}
+				[3.3647962]
+				{'time': '19:30:00', 'month': '2', 'weather_code': '2.0', 'cloud_cover': 72.0, 'temperature': 5.400000095367432}
+				[9.012604]
+				{'time': '20:00:00', 'month': '2', 'weather_code': '3.0', 'cloud_cover': 92.0, 'temperature': 3.5999999046325684}
+				[0.97131664]
+				{'time': '20:30:00', 'month': '2', 'weather_code': '3.0', 'cloud_cover': 92.0, 'temperature': 3.5999999046325684}
+				[-2.0620754]  <-- !!!!!!!!!!!!!!!!!!!!!
+				{'time': '21:00:00', 'month': '2', 'weather_code': '3.0', 'cloud_cover': 94.0, 'temperature': 2.700000047683716}
+				[3.1366458]
+				{'time': '21:30:00', 'month': '2', 'weather_code': '3.0', 'cloud_cover': 94.0, 'temperature': 2.700000047683716}
+				[4.771269]
+
+		* review model training by adding cloud coverage to categorical features (it's a percentage but it is always a discrete integer, not float)
+		x (OPTIONAL) check whether dictionary vectorizer is correctly uploaded into MlFlow with Pickle
+		
+20260209
+- Project solar-energy-surplus-estimator
+	- fixes in app-serving.ipynb file
+		- bug when hour of the day is single digit
+	- rerfactoring by adding a weather_data.py module that includes open-meto API for both historical weather data and current day data forecast
+	- changed open-meteo data retrieval: retrieved "cloud_cover_high" instead of "cloud_cover" for better weather condition modelling (checked with solar energy production in 2025 summer days)
+	- reviewed solar-estimator-model-pipeline.py according to previous changes and added hyperparameters computation at every run 
+		INFO:root:best run_id: 5781a87702dd4bdd9bb428b8708ac8ca, rmse: 321.4108229940825
+		INFO:root:Model training ended, best_run_id = 5781a87702dd4bdd9bb428b8708ac8ca, best rmse = 321.4108229940825, best model id = m-e1067b014dfc4fe49f11a3df7f087fe8
+	- TODO
+		x Retrive params from best run achieved with Xgboost hyperparameter tuning and use LinearRegression to create a model with them instead using Xgboost booster, see if negative surplus shows up again
+		* update solar-estimator-model-dag.py with changes from solar-estimator-model-pipeline.py --> LABEL BEST MODEL AS THE PRODUCTION ONE
+		* update app-serving.py from app-serving.ipynb and deploy it
+		* update airflow image with python packages from last training pipeline
+
+
+20260209
+- Project solar-energy-surplus-estimator
+	- developed and tested app-serving.py (from app-serving.ipynb) which leverage streamlit library to interact with the model using a web page
+		- run "streamlit --log_level debug run app-serving.py" to see the model served (after having brought up the stack using "docker compose up -d")
+	- TODO
+		X Retrive params from best run achieved with Xgboost hyperparameter tuning and use LinearRegression to create a model with them instead using Xgboost booster, see if negative surplus shows up again
+		* deploy app-serving.py in a dedicated container
+		* update airflow image with python packages from last training pipeline
+		* update solar-estimator-model-dag.py with changes from solar-estimator-model-pipeline.py --> ADD ALIAS TO THE BEST MODEL AS THE "PRODUCTION" ONE
+		
+
+20260213
+- Project solar-energy-surplus-estimator
+	- deploy app-serving.py in a dedicated container
+	- update airflow image with python packages from last training pipeline
+	- update solar-estimator-model-dag.py with changes from solar-estimator-model-pipeline.py, ADD ALIAS TO THE BEST MODEL AS THE "PRODUCTION" ONE
+	- run full DAG, all fine !!
+	- TODO
+		* download "Production" alias model from app-serving application
+		* add CI pipeline to run code tests and integration tests (i.e. install and run the whole stack on a github action VM as if it were a user local VM)
+			- Tests
+				- docker-compose up -d --> all containers up and running
+				- minio/airflow/mlflow/app-serving UI are reachable (curl -f)
+				- weather data module: it can download data and it is how expected
+				- app-serving: clicking Estimate surplus button does NOT returns an error
+		* refine documentation (include cpu/ram needed to run the stack)
+		
+
+
+20260216
+- Project solar-energy-surplus-estimator
+	- downloaded "Production" alias model from app-serving application
+	- first version of ci.yaml workflow for continuous integration
+		- TODO
+			* fix CI workflow
+				- secrets.minio_root_user conflicts with imported resource
+			- add python tests for weather_data module
+			* visualize data graphically (weather data and surplus prediction generation)
+				st.info("Weather data preview")
+				st.dataframe(df_eval)
+
+
+20260218
+- Project solar-energy-surplus-estimato
+	- fix worflow
+		- secrets.minio_root_user was created both in docker-compose and in docker-compose-airflow
+		- image creation issue in "docker compose build" step: all services shared a build step with the same hard-coded image name, there was a conflict during build. By removing names the issue is gone, but then there are 6 identical images for the same task
+		- TODO
+			* worflow
+				* remove strategy/matrix, it is the cartesian product of all combinations !!
+				X create an additional step that builds the airflow image FOR WORKER SERVICE ONLY and leverage standard one for all the others by using env vars as source of data for ARG values in Dockerfiles --> NOT DONE, IMAGE LAYERS ARE THE SAME FOR ALL IMAGES DESPITE THE NAME IS DIFFERENT FOR ALL SERVICES
+				* add image caching during github build workflow
+			- add tests:
+				- python weather_data module
+				- airflow
+			* app-serving
+				- visualize data graphically (weather data and surplus prediction generation)
+				  st.info("Weather data preview")
+				  st.dataframe(df_eval)
+				- display model version being used
+			* run first model training automatically ??
+			* airflow
+				- check output when new model is created
+					- [2026-02-19 12:29:41] INFO - best run_id: 7573e78b649a4466ad281eb356b80414, rmse: 318.21294695442236
+						[2026-02-19 12:29:41] ERROR - Registered model 'solar-surplus-estimator' already exists. Creating a new version of this model...
+						[2026-02-19 12:29:42] ERROR - 2026/02/19 11:29:42 WARNING mlflow.tracking._model_registry.fluent: Run with id 7573e78b649a4466ad281eb356b80414 has no artifacts at artifact path 'model', registering model based on models:/m-b98d8da8654f400dbcad341c51ecfece instead
+						[2026-02-19 12:29:43] ERROR - 2026/02/19 11:29:43 INFO mlflow.store.model_registry.abstract_store: Waiting up to 300 seconds for model version to finish creation. Model name: solar-surplus-estimator, version 5
+						[2026-02-19 12:29:43] ERROR - Created version '5' of model 'solar-surplus-estimator'.
+						[2026-02-19 12:29:43] INFO - Registered model solar-surplus-estimator with new version 5 has now alias production
+						[2026-02-19 12:29:43] INFO - Model training completed - best_run_id: 7573e78b649a4466ad281eb356b80414, best rmse: 318.21294695442236, best model id: m-b98d8da8654f400dbcad341c51ecfece, best version: 5
+						[2026-02-19 12:29:43] INFO - Done. Returned value was: None
+						[2026-02-19 12:29:43] INFO - Task instance in success state
+						[2026-02-19 12:29:43] INFO -  Previous state of the Task instance: TaskInstanceState.RUNNING
+						[2026-02-19 12:29:43] INFO - Task operator:<Task(PythonOperator): train_model>
+			- add TODO section in README.md:
+				* include monitoring and retraining
+				
+				
+				
+20260219
+- Project solar-energy-surplus-estimato
+	- worflow
+		- refactored images usage, now they are built outside docker-compose not to have many different images with the same content for airflow
+		- add docker image caching during image build process
+		- fix tests on running containers: TESTS WERE RUN IN A DIFFERENT JOB WHICH LEVERAGED A DIFFERENT RUNNER, SO CONTAINERS WERE NOT PRESENT !!
+		- TODO
+			* worflow
+				- review caching scope key for app-serving image
+			- add tests:
+				- python weather_data module
+				- airflow
+			- add TODO section in README.md:
+				- include monitoring and retraining
+				- python tests
+				- deploy to K8S with ArgoCD in a cloud env provisioned with Terraform
+
+
+20260226
+- Project solar-energy-surplus-estimator
+	- worflow
+		- !! fix images build with cache and push steps
+			- GITHUB REGISTRY LOGIN STEP WAS MISSING
+			- IMAGE MUST BE PUSHED WITH A TAG INCLUDING REPOSITORY HOST AND FOLDER WHICH IS FOR ME "ghcr.io/paleze"
+		- !! fix curl tests on running services: SQUARE BRACES IN "if" STATMENT WERE CAUSING THE ERROR !!
+		- TODO
+			* logging.basicConfing(level=logging.INFO, format="%(asctime)s [%(levelname)]: %(message)")
+			* worflow
+				* general cleanup
+				* try to remove "load" option in "build-and-push" action, Maybe it is useless
+			* docker-conmpose
+				X add different networks for backend and frontend
+				* try to re-run the stack WITHOUT the repo prefix added to uplaod images to ghcr.io registry
+			- add tests:
+				- python weather_data module (use DeepDiff library to compare dictionaries, use its significant_digits param to specify number approximation)
+				- airflow
+				- cloud services with LocalStack (https://github.com/localstack/localstack)
+			* app-serving
+				- visualize data graphically (weather data and surplus prediction generation)
+				  st.info("Weather data preview")
+				  st.dataframe(df_eval)
+				- display model version being used
+			* Documentation
+				- reference to open source projects used (MLOps Zoomcamp, Powerwall.py to download data, ecc. SEE WHAT KIND OF PROJECTS MUST BE MENTIONED)
+			* Monitoring
+				* log input requests and output responses
+				* create a monitoring system on these logs with Prefect/Airflow pipelines in order to compute prediction performance metrics using Evidently AI library and store data in a PostGres database (https://www.youtube.com/watch?v=fytrmPbcLhI&list=PL3MmuxUbc_hIUISrluw_A7wDSmfOhErJK&index=28)
+				* use these metrics to trigger model retraining
+				* use Grafana to display this performance metrics from PostGres database
+				- ADD MODEL EXPLANATION ?? This is used to monitor WHY the model provided a specific prediction. EXAMPKE: an image recognition model can provide the portion of the input image that allows it to predict its label (e.g. image of a cat --> cat race)
+			x PostGreSQL
+				- use the same instance for both airflow and mlflow ??
+				- install adminer to access PostGre database convenientlly ?
+
+
+20260316
+- Project solar-energy-surplus-estimator
+	- workflow
+		- cleanup
+	  NOTE: How to access images pushed to ghcr.io (see linke "Packages" in the github repo UI): https://github.com/paleze?tab=packages&repo_name=solar-energy-surplus-estimator
+	- TODO
+		- worflow
+			* create a separate "test" job that log into registry, create the docker-compose stack and test connections to ui
+			X try to REMOVE IMAGE_REPO_PREFIX env var by performing a registry login so that docker-compose can be called with local images as well
+		- model retraining
+			X consider Alibi for drift detection (https://www.youtube.com/watch?v=s_p4dkGdVho):
+				- outlier detection
+				- adversarial detection
+				- data drift detection ( Kolmogorov-Smirnov detection, KSDrift)
+				- concept drift detection
+			* Drift detection can be added to Airflow DAG using a branch
+				- if drift is detected then download more recent data and retrain. otherwise do NOT retrain
+				- add an env var or similar to FORCE a retraining to test it
+			* Traing should happen then when NO MODEL is found OR when a drift is detected
+			
+
+
+20260317
+- Project solar-energy-surplus-estimator
+	- workflow
+		- create a separate "test" job that log into registry, create the docker-compose stack and test connections to ui
+	- monitoring
+		- create branch feature/model-monitoring  
+		- added data folder to save both training and prediction data for later analysis about data drift
+		- TODO
+			X solve issues while installing alibi-detect package, maybe the Kolmogorov-Smirnov test can be achieved with different libraries
+			X use "pip install --upgrade alibi-detect" but downgrade to Python 3.13., check which python version is installed in container
+			* use code https://github.com/iQuantC/ML_Drift-Detection_Monitoring_System/blob/main/model-service/app.py to implement Drift Detection using Scipy library
+			* find a way to export prometheus metrics from streamlit application and add prometheus + grafana
+
+
+20260323
+- Project solar-energy-surplus-estimator
+	- monitoring
+		- added evidently AI library for drift detection
+		- TODO
+			* defined which columns are categorical and which are numerical. DRIFT WILL ALWAYS OCCUR AS THERE IS VERY FEW PREDICTION DATA WITH RESPECT TO TRAINING DATA, CHOOSE ONLY SELECTED COLUMNS FOR DRIFT DETECTION ??
+			* put drift detection in a dropdown panel
+		 
+20260323
+- Project solar-energy-surplus-estimator
+	- monitoring
+		- added evidently AI library for drift detection
+		- TODO
+			* defined which columns are categorical and which are numerical. DRIFT WILL ALWAYS OCCUR AS THERE IS VERY FEW PREDICTION DATA WITH RESPECT TO TRAINING DATA, CHOOSE ONLY SELECTED COLUMNS FOR DRIFT DETECTION ??
+			* put drift detection in a dropdown panel
+		 
+
+20260324
+- Project solar-energy-surplus-estimator
+	- defined which columns to be considered for drift detection (not time, month)
+	- added drift analysys panel by using Evidently AI libary with custom input data for minimum size of data to be considered and drift threshold to be applied. ** THIS WAY THE USER CAN FORCE OR AVOID DRIFT DETECTION **
+	- TODO
+		* monitoring
+			* add retraining trigger on airflow by pressing a button and automatically open airflow web page
+				if drift_eval.metrics[0].metric_result.drift_detected:
+					st.warning("⚠️ Data drift detected! Press button to trigger model retraining with more recent data")
+					if st.button("Trigger Retraining", type="primary"): 
+						# TODO
+						st.info("Triggering model retraining...") 
+			* add prometheus metrics
+		* review graphic layout
+
+
+20260326
+- Project solar-energy-surplus-estimator
+	- implemented prometheus metrics in streamlit
+		- *** I HAD TO DOWNGRADE STREAMLIT VERSION TO 1.49.0 IN ORDER TO USE PROMETHEUS MOUDLE IN EXTRAS LIBRARY streamlit-extras==0.7.8 (REMOVED IN streamlit-extras LATEST VERSIONS) OTHERWISE I ALWAYS GOT ERROR "Duplicated timeseries in CollectorRegistry" WHILE USING prometheus_client LIBRARY  ***
+		- added some metrics in metrics.py and checked they are scrapable from endpoint "localhost:8501/_stcore/metrics"
+		- ** WHEN CHANGING FILES IN THE APP-SERVING CONTAINER, IT MUST ALWAYS BE RESTARTED TO PROPERLY RESET THE STREAMLIT PROMETHEUS METRICS DEFINITION NOT TO HAVE THE "Duplicated timeseries in CollectorRegistry" ERROR ** 
+	- TODO
+		- monitoring
+			* add prometheus and grafana containers
+		* REDUCE CUSTOM IMAGES SIZE !! MAYBE BY JUST INSTALLING THE LIBRARY COMPONENTS I NEED AND NOT THE FULL LIBRARIES (IF POSSIBLE)
+		
+
+
+
+20260327
+- Project solar-energy-surplus-estimator
+	- Added prometheus and grafana containers
+		- many issues in having the grafana container started with custom admin password passed as docker secret, there is a non-typo in the secret file name as it includes two underscore "__" instead of one only
+	- TODO
+		* *** REVIEW ERROR IN PIPELINE, PROMETHEUS CONTAINER DOES NOT START, TRY TO CLONE THE PROJECT AND RECREATE IN A DIFFERENT COMPUTER ***
+		* *** Merge feature/model-monitoring branch ***
+		- change grafana drift score panel and metrics to show the drift threshold near each feature drift score
+		* REDUCE CUSTOM IMAGES SIZE !! MAYBE BY JUST INSTALLING THE LIBRARY COMPONENTS I NEED AND NOT THE FULL LIBRARIES (IF POSSIBLE)
+			- in app-serving image these python packages are the biggest ones:
+				- 150M	/usr/local/lib/python3.13/site-packages/pyarrow
+				- 208M	/usr/local/lib/python3.13/site-packages/xgboost
+				- 384M	/usr/local/lib/python3.13/site-packages/nvidia
+		- review streamlit graphic layout, maybe add prediction data with sun/clouds etc according to the weather_code and cloud_cover
+		
+
+
+20260330
+- Project solar-energy-surplus-estimator
+	- custom images size reduction
+		- create new branch fix/custom-image-size
+		- reduce image app-serving from 1.7 GB to 807 MB ny using librart xgboost-cpu and removing scikit-learn which was not used
+		- issues in reducing airflow image size, the slim images do not contain all required packages, the "psycopg2" library is missing
+	- TODO
+		* custom images size reduction
+			* reduce airflow image size
+				* *** Postegres database look corrupted, consider to start from scratch **
+				* *** try to use airflow slim image and to install required postgres libraries, see airflow slim images documentation
+				* see error "ModuleNotFoundError: No module named 'pkg_resources'"
+		* monitoring
+			* *** REVIEW ERROR IN GITHUB BUILD PIPELINE, PROMETHEUS CONTAINER DOES NOT START, TRY TO CLONE THE PROJECT AND RECREATE IN A DIFFERENT COMPUTER ***
+			* *** Merge feature/model-monitoring branch ***
+			* add celery monitoring from airflow
+		
+
+
+20260331
+- Project solar-energy-surplus-estimator
+	- custom images size reduction
+		- used image apache/airflow:slim-3.1.6-python3.13 and installed all the missing python packages (see airflow-requirements.txt)
+			- apache-airflow-providers-postgres==6.6.2
+			- apache-airflow-providers-fab==3.6.0
+			- apache-airflow-providers-celery==3.17.2
+			- celery==5.6.3
+			- setuptools==81.0.0 # this is requested for missing pkg_resources module, deprecated and removed from setuptools=>82 but still requested by hyperopt module as it is older
+		- *** custom airflow images size dropped from 3.2 GB to 1.39GB and custom app-serving image dropped from 1.7 GB to 870 MB
+		- recreated postgres data by mounting a local folder like in mlflow compose configuration instead of using a docker volume
+		- tested a training pipeline dag run
+		- Merged feature/model-monitoring branch
+	- monitoring
+		- add celery garfana dashboard to show airflow workflows data
+		- error in github pipeline was probably due to the fact that prometheus data folder had not the correct write permissions for the prometheus container like the grafana data folder did
+	- TODO
+		* monitoring
+			- add retraining trigger on airflow by pressing a button and automatically open airflow web page (https://reintech.io/blog/triggering-dags-in-airflow-external-triggers-and-apis)
+				if drift_eval.metrics[0].metric_result.drift_detected:
+					st.warning("⚠️ Data drift detected! Press button to trigger model retraining with more recent data")
+					if st.button("Trigger Retraining", type="primary"):
+						# TODO
+						st.info("Triggering model retraining...") 
+		- review streamlit application
+			* global variables
+			- graphic layout, maybe add prediction data with sun/clouds etc according to the weather_code and cloud_cover
+		* fix docker compose by removing external access by setting 127.0.0.1 in host port mapping
+		* automatically upload source data into minio bucket (maybe already done somewhere)
+		x set resource limits in docker compose and add overall required resources in README.md
+			OUTPUT OF "docker stats" DURING TRAINING:
+				CONTAINER ID   NAME                                CPU %     MEM USAGE / LIMIT     MEM %     NET I/O           BLOCK I/O         PIDS 
+				a8f8561deb7c   estimator-airflow-worker-1          119.40%   1.527GiB / 62.57GiB   2.44%     18.6MB / 182MB    0B / 51.3MB       65 
+				da07c0b7c035   estimator-airflow-dag-processor-1   0.72%     213.9MiB / 62.57GiB   0.33%     31.8MB / 28.7MB   0B / 32.3MB       4 
+				c080c88a9e71   estimator-airflow-apiserver-1       5.17%     373.9MiB / 62.57GiB   0.58%     37.7MB / 23.3MB   0B / 30.6MB       22 
+				27e4b38189cf   estimator-airflow-scheduler-1       2.32%     264.6MiB / 62.57GiB   0.41%     11.6MB / 10.5MB   0B / 28MB         4 
+				900c1eb0043c   estimator-flower-1                  0.04%     177.6MiB / 62.57GiB   0.28%     320kB / 370kB     0B / 27MB         22 
+				ca182ad36ddb   estimator-airflow-triggerer-1       0.73%     333.2MiB / 62.57GiB   0.52%     1.69MB / 2.39MB   0B / 28.4MB       9 
+				549b1fac34bd   estimator-app-serving-1             0.00%     353.5MiB / 62.57GiB   0.55%     10.4MB / 12.1MB   0B / 10.5MB       28 
+				67ff96b07355   estimator-minio-1                   2.43%     149.2MiB / 62.57GiB   0.23%     165MB / 39.4MB    0B / 331MB        17 
+				3dd2bf3df837   prometheus                          1.81%     34.53MiB / 62.57GiB   0.05%     417kB / 58.1kB    406kB / 340kB     17 
+				b44809bb9e8e   grafana                             0.45%     91.07MiB / 62.57GiB   0.14%     65kB / 10.2kB     1.44MB / 1.09MB   17 
+				82202ea098fc   estimator-mlflow-1                  4.32%     857MiB   / 62.57GiB     1.34%     172MB / 173MB     209kB / 0B        134 
+				5c96eca16e76   estimator-airflow-postgres-1        3.05%     96.25MiB / 62.57GiB   0.15%     57.5MB / 66.5MB   0B / 39MB         21 
+				6a7553420dd0   estimator-mlflow-postgres-1         0.41%     61.5MiB  / 62.57GiB    0.10%     1.73MB / 1.93MB   49.2kB / 16.5MB   21 
+				56b46b552c35   estimator-redis-1                   0.09%     3.949MiB / 62.57GiB   0.01%     703kB / 771kB     0B / 8.19kB       6 
+
+	
+
+
+20260401
+- Project solar-energy-surplus-estimator
+	- fix docker compose by removing external access by setting 127.0.0.1 in host port mapping
+	- add model retraining trigger by following Airflow Rest API page "https://airflow.apache.org/docs/apache-airflow/stable/stable-rest-api-ref.html#operation/get_dag_runs"
+		- study data
+			curl -X POST http://localhost:8080/auth/token \
+				  -H "Content-Type: application/json" \
+				  -d '{
+					"username": "airflow",
+					"password": "airflow"
+				  }'
+
+			curl -X POST "http://localhost:8080/api/v2/dags/solar_energy_surplus_estimator_model_pipeline/dagRuns" \
+			  -H "Authorization: Bearer ${JWT_TOKEN}" \
+			  -H "Content-Type: application/json" \
+			  -d '{
+				"logical_date": "2026-04-01T14:50:00Z",
+				"conf": { },
+				"note": "string"
+			  }'
+	- TODO
+		* model retraining
+			* check if a model training dag run is already running before scheduling a new one
+			* schedule an initial model training dag run when no production model is found
+		- streamlit UI
+			- Message "Dataset Drift is NOT detected. Dataset drift detection threshold is 0.5" always shows 0.5 even when drift threshold is different
+		* Add in README.md
+			x application diagram with modules involved
+			x how model training works, the best model always keeps the "production" label
+			x Where do we go from here
+				- source data should be re-downloaded before retriggering
+				- implement in Kubernetes 
+				- add GPU support for faster model training	
+				- deploy to K8S with ArgoCD in a cloud env provisioned with Terraform
+
+
+
+20260403
+- Project solar-energy-surplus-estimator
+	- model retraining
+		- check if a model training dag run is already running before scheduling a new one
+		- schedule an initial model training dag run when no production model is found
+		- study data
+			# get last DAG run state, get all dag runs order by descending start_date
+			curl "http://localhost:8080/api/v2/dags/solar_energy_surplus_estimator_model_pipeline/dagRuns?order_by=-start_date" -H "Authorization: Bearer ${JWT_TOKEN}" | jq ".dag_runs[0].state"  --> "running"
+	- moved training data and prediction data to Minio bucket
+	- TODO
+		x monitoring
+			x let prometheus store its data in Minio S3 bucket ??
+		* streamlit UI
+			* enable message logging in the standard output
+			* resize textbox width, some are too wide
+			* set time in LOCAL time and not UTC
+			* application functions refactoring, move to external files
+		* model training
+			X try not to bind airflow folders to local ones OR BETTER TO MOVE THEM TO MINIO BUCKETS AS WELL
+				- strange error "Could not read served logs: Invalid URL 'http://:8793....': Not host supplied " when NOT mounting airflow local folder in the container
+				- look at possible solution at "https://github.com/apache/airflow/discussions/45525": LOOKS LIKE THE airflow/config/airflow.cfg  IS THE MISSING IF I DON'T MOUNT THE LOCAL FOLDERS ? WHERE DOES THIS FILE COMES FROM ?? I DON'T REMEMBER I MANUALLY PROVIDED IT
+			X ERROR - 2026/04/03 12:35:25 WARNING mlflow.models.model: `artifact_path` is deprecated. Please use `name` instead. --> CANNOT FIND THE CAUSE OF THIS ERROR, IT IS *NOT* IN THE CODE I HAVE WRITTEN, I SUSPECT KIND OF A PYTHON LIBRARIES VERSION MISMATCH
+		* drift analysis
+			* use minio bucket to save prediction_data.csv
+			X check why "time" column is part of the drift analysis  --> DISAPPEARED
+		- github actions
+			- in the test job wait 30 seconds for all continers to be healthy
+		* setup
+			* automatically enable model training dag when created
+			x remove Airflow built-in dags ??
+			x create minio buckets programmatically (mlflow, source-data, analysis-data)
+		* other open source project reference in the project
+			- MLOps Zoomcamp
+			- ...
+
+
+
+20260407
+- Project solar-energy-surplus-estimator
+	- refactored folder structure in branch feature/folders-refactoring
+	- add solar energy source-data automatic upload from minio-init container
+	- TODO:
+		* test solution deployment in a different folder
+		* test github worklow after folders refactoring
+
+
+20260407
+- Project solar-energy-surplus-estimator
+	- refactored folder structure in branch feature/folders-refactoring
+	- add solar energy source-data automatic upload from minio-init container
+	- TODO:
+		X MAKE A REALEASE ??
+
+20260408
+- Project solar-energy-surplus-estimator
+	- branch feature/folders-refactoring
+		- tested in new "test" user the refactored folders structure from branch "feature/folders-refactoring"
+		- many fixes to use the new structutue
+		- ** ERRROR IN AIRFLOW "INVALID AUTH TOKEN" WHEN TRIGGERING DAG VIA REST API FROM STREAMLIT APP. NO MATTER IF *ALL* IS RECTREATED, THE ERRROR PERSISTS
+	- TODO:
+		* see log file in solar surplus project folder under test user home folder
+		* test MANUAL AIRFLOW dag triggering
+		* see in internet this error, looks like a specific env file must be set, BUT SO FAR IT HAS ALWASY WORKED WELL !!
+		
+20260416
+- Project solar-energy-surplus-estimator
+	- branch feature/folders-refactoring
+		- in new "test" user home folder,fixed missing "INVALID AUTH TOKEN" error, the jwt_secret token was not automatically created by airflow-apiserver container any more. Reason not found, fixed by upgrading airflow version to 3.2.0
+			- Noticed this in logs from apiserver container:
+			  [warning  ] api_auth/jwt_secret was empty, using a generated one for now. Please set this in your config [airflow.api_fastapi.auth.tokens]	  
+		- tested automatic model training trigger when no model is present or when drift is detected, ALL FINE
+		- Set current user in those containers that create files or change permissions in volumens linked to local folders. This way cleanup can be done without being "sudo"
+		- TODO
+			* test github pipeline in this branch and add cleanup script
+			* cleanup and recreate env with cleanup.sh and setup.sh scripts in order to have a fresh install
+			* add documentation
+			* merge branch into main
+			
+
+20260422
+- Project solar-energy-surplus-estimator
+	- branch feature/folders-refactoring
+		- fix github action CI pipeline
+		- cleanup and recreate local environment
+		- add documentation about setup and cleanup
+		- merged to main
+	- branch feature/improve-documentation
+		- added many sections at README file
+	- TODO
+		* resources
+			* test model training on a server with less resources
+			* add a training benchmark to documentation saying that no GPU is supported at the moment
+		- documentation
+			* refer to open-meteo library in pipeline and serving app description
+			* add overall architecture (or maybe better "application Diagram")
+			x refer to Python libraries in pipeline implementation
+			x refer to custom docker images
+			- add credits
+				x to open-meteo ? NOT NEEDED, I AM JUST USING ITS OPEN-SOURCE LIBRARY
+				- airflow
+				X minio (License, see file "minio-license.txt"
+			* remove `watch 'docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"'` ) but put it in the startup script
+
+
+20260424
+- Project solar-energy-surplus-estimator
+	- branch feature/improve-documentation
+		- added architecture diagram with draw.io
+		- refactored project description text
+	- branch fix/cleanup
+		- removed commented code
+		- fixed app-serving container timezone to correctly display current time
+	- TODO
+		* add some description for the architecture section, use again the feature/improve-documentation branch
+		* refactor python code, remove global variables
+		- set the repo to public and try to download and install on another laptop less powerful than Calinet to check the training pipeline performance (eventually add this information to the documentation)
+		
+
+	
+
+20260427
+- Project solar-energy-surplus-estimator
+	- branch fix/code-refactoring
+		- changed python code to use classes instead of global variables, TO BE TESTED
+		
+
+20260428
+- Project solar-energy-surplus-estimator
+	- branch fix/code-refactoring
+		- tested refactored python code to use classes instead of global variables both in Airflow DAG and in app-serving App
+			- created dedicated classes to incapsulate specific data and method for to interact with Airflow, Minio and Mlflow
+			- merged in main
+	- test in Samsung Laptop with 4 cores and 8 Gb RAM
+		- takes some time to start
+		- needs about 3 GB RAM and 8 GB of space to download all images (some heavy ones)
+		- !! STOPPED MODEL TRAINING AFTER MORE THAN 1 HOUR, IT WAS COMPUTING STEP 15 OF 20, IT MUST BE CONFIGURABLE BY THE USER ACCORDING TO THE QUALITY REQUESTED OR SETUP AUTOMATICALLY ACCORDING TO THE NUMBER OF CPUS
+	- TODO
+		- test with non super-performing laptop (Samsung laptop)
+			* increase timeout in start.sh from 60 to 300 seconds (airflow init is very slow on slower laptops)
+			* add a ./stop.sh script that executes "docker compose stop". Consider to rename start.sh script to setup.sh and use the start.sh name for a command like "docker compose up -d" that should be quicker to restart an already configured environment
+			* let the number of steps in the training be configurable, now there are 20 steps which take 6 minutes on 12 processors, maybe configure them according to number of CPUs
+			* write in README.md that by enabling GPU support the airflow image will become 500 MB bigger as it has to include the xgboost-nvidia library
+
+
+20260429
+- Project solar-energy-surplus-estimator
+	- branch feature/configurable-hyperopt-tuning-param
+		- add 3 HYPEROPT env parameters to control 
+		- tried with 5 runs that stop after 10 iterations with no improvement: on Samsung laptop (i7, 4 cores) it takes ~6 minutes 
+		- TODO
+			* add documentation section about hyperopt parameters and resources/times taken to run the stack and train the model (see yesterday's comment)
+	- branch fix/ui-refactoring
+		- modified data input widgets positions and displayed predicted surplus data every 30 mins
+		- TODO
+			* check other fixes and merge branch
+	- TODO
+		* add option "--rmi all/local" in "docker compose down" in cleanup.sh to remove *all* images downloaded by the docker-compose (they can be ~8 GB)
+
+
+
+20260430
+- Project solar-energy-surplus-estimator
+	- merged branch fix/ui-refactoring
+	- TODO
+		* save all source data file as one csv file using code from solar-estimator-model-pipeline.py and upload that file only in the repo not to public too much information
+		* fix python and CSV file names with "-", replace it with "_"
+		- UI
+			- let streamlit UI enter data manually instead of using +/- button
+			- add weather code icons from weather-code-description.json file to the displayed predicted dataset
+			- add model version being used
+			
+
+
+
+20260505
+- Project solar-energy-surplus-estimator
+	- branch fix/source-data
+		- moved all source energy data files into just one csv file withe relevant columns only
+		- merged
+	- branch fix/refactor-file-names
+		- fix python file names replacing dashes with underscores
+		- merged
+	- branch fix/refactor-scripts
+		- add stop,sh script to stop containers without removing them
+		- add "--rmi" option to "docker compose down" in cleanup.sh script
+		- deleted all images and rebuilt the whole stack to test new cleanup.sh script
+	- TODO
+		- try to understand why there is a double log with "info" and "error" in airflow logging
+		
+	
+20260506
+- Project solar-energy-surplus-estimator
+	- branch feature/improve-documentation
+		- improve architecture description and fix minor issues
+
+		
+		

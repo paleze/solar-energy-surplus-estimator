@@ -105,7 +105,8 @@ This is a demo project and plenty of improvements can be added:
 - refine model training features
 - refine data drift detection and add alerting when drift is detected
 - leverage GPUs during model training process (this would increase airflow custom image size by ~450 MB to add python libraries for GPU support)
-- provision a cloud environment managed with Terraform
+- provision to a cloud environment managed with Terraform
+- replace MinIO with a cloud S3 object storage
 - deploy all workloads in Kubernetes with a GitOps approach
 - ... and many others
 
