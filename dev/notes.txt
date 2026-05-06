@@ -671,5 +671,4 @@
 	- branch feature/improve-documentation
 		- improve architecture description and fix minor issues
 
-		
-		
+

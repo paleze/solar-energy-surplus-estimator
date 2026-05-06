@@ -7,8 +7,8 @@ on:
         - opened
         - reopened
       paths-ignore: # ignore pull requests on documentation files
-        - README.md
-        - dev/notes.txt
+        - "**.md"
+        - "**.txt"
 
 env:
   IMAGE_TAG_PREFIX: ghcr.io/${{ github.actor }}/
