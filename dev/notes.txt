@@ -670,3 +670,5 @@
 - Project solar-energy-surplus-estimator
 	- branch feature/improve-documentation
 		- improve architecture description and fix minor issues
+
+
