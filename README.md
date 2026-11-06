@@ -1,5 +1,7 @@
 # Solar energy surplus estimator
 
+**NOTE: Effective September 2026 `minio` and `minio/mc` docker images are no more publicly accessible. Please review the updated version of this project in this [Gitlab repo](https://gitlab.com/caliban74/solar-energy-surplus-estimator)**
+
 This is a demo Machine Learning Operation (MLOps) project that aims to help maximizing solar energy self-consumption. This goal is achieved by predicting the amount of energy produced by solar panels that will be neither immediately consumed by home appliances nor stored in the home battery storage because it will be already at full capacity. In this situation this energy would therefore be exported to the grid but it could be used to power other home appliances during the day instead while ensuring that the battery will remain at full capacity at sunset in order to power the house overnight.
 
 
